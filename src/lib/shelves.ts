@@ -39,5 +39,24 @@ function caseIndex(catName: string): number {
 
 /** CSS colour of a category's binding, e.g. `var(--bind-hadith)`. */
 export function bindingColor(cat: Category | undefined): string {
-  return `var(--bind-${BOOKCASES[cat ? caseIndex(cat.name) : BOOKCASES.length - 1][0]})`;
+  return `var(--bind-${bookcaseKey(cat)})`;
 }
+
+/** Day colours of the bindings (the same as --bind-* in app.css), for the EPUB cover. */
+const BINDING_HEX: Record<string, string> = {
+  aqida: '#7a2e2a',
+  quran: '#2f5d4a',
+  hadith: '#2b3f63',
+  usul: '#5a3a5e',
+  fiqh: '#8a5a1f',
+  raqaiq: '#5b6332',
+  tarikh: '#8c4a2f',
+  lugha: '#3f5666',
+  amma: '#6b5e50',
+};
+
+export function bindingHex(cat: Category | undefined): string {
+  return BINDING_HEX[bookcaseKey(cat)];
+}
+
+const bookcaseKey = (cat: Category | undefined) => BOOKCASES[cat ? caseIndex(cat.name) : BOOKCASES.length - 1][0];

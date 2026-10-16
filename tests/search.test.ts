@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { decodeCatalog, type Book, type CatalogFile } from '../src/lib/catalog/types.ts';
-import { CatalogSearch, parseBookRef } from '../src/lib/search/search.ts';
+import { CatalogSearch, parseBookLink, parseBookRef } from '../src/lib/search/search.ts';
 
 const file = JSON.parse(readFileSync(new URL('../public/data/catalog.json', import.meta.url), 'utf8')) as CatalogFile;
 const search = new CatalogSearch(decodeCatalog(file));
@@ -121,6 +121,12 @@ describe('search: other ways in', () => {
     expect(parseBookRef('٢٢٦٦٩')).toBe(22669);
     expect(parseBookRef('سير 22669')).toBeUndefined();
     expect(search.direct('99999999')).toBeUndefined();
+  });
+
+  it('reads the page in a shamela.ws link', () => {
+    expect(parseBookLink('https://shamela.ws/book/8376/1672')).toEqual({ book: 8376, page: 1672 });
+    expect(parseBookLink('shamela.ws/book/8376')).toEqual({ book: 8376, page: undefined });
+    expect(parseBookLink('8376')).toBeUndefined();
   });
 
   it('is fast', () => {

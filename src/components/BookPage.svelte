@@ -23,8 +23,9 @@
   // A book's title page: centred title, author, editor, publisher, then the download.
   import { store } from '../lib/catalog/store.svelte.ts';
   import { NOUNS, count, died, num, published, size } from '../lib/format.ts';
-  import { href } from '../lib/route.svelte.ts';
+  import { href, route } from '../lib/route.svelte.ts';
   import { bindingColor } from '../lib/shelves.ts';
+  import Download from './Download.svelte';
 
   let { id }: { id: number } = $props();
 
@@ -32,8 +33,6 @@
   const title = $derived(book ? splitTitle(book.title) : undefined);
 
   const editions = $derived(book && store.catalog ? editionsOf(book, store.catalog.books) : []);
-
-  let notice = $state(false);
 
   $effect(() => {
     if (book) document.title = `${book.title} — نسخة`;
@@ -88,11 +87,8 @@
       {#if book.printed}<li class="badge">موافق للمطبوع</li>{/if}
     </ul>
 
-    <div class="download">
-      <button class="primary" onclick={() => (notice = true)}>تحميل EPUB</button>
-      {#if notice}
-        <p class="notice" role="status">صفحة التحميل جاهزة؛ إنشاء الملف يأتي في الخطوة التالية.</p>
-      {/if}
+    <Download {book} page={route.page} />
+    <div class="source">
       <p class="links">
         <a href="https://shamela.ws/book/{book.id}" target="_blank" rel="noopener">الكتاب في المكتبة الشاملة</a>
         <span class="sep">·</span>
@@ -227,27 +223,6 @@
   .badge {
     color: var(--accent);
   }
-  .download {
-    margin-top: 28px;
-  }
-  .primary {
-    background: var(--accent);
-    color: var(--accent-ink);
-    border: 0;
-    border-radius: 2px;
-    padding: 10px 40px;
-    font-size: 1.15rem;
-    cursor: pointer;
-    min-width: 220px;
-  }
-  .primary:hover {
-    filter: brightness(1.1);
-  }
-  .notice {
-    font-size: 0.9rem;
-    color: var(--ink-soft);
-    margin: 10px 0 0;
-  }
   .links {
     margin: 14px 0 0;
     font-size: 0.9rem;
@@ -283,9 +258,6 @@
   @media (max-width: 480px) {
     .titlepage {
       padding: 28px 14px 24px;
-    }
-    .primary {
-      width: 100%;
     }
   }
 </style>

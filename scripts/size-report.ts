@@ -9,7 +9,10 @@ const BUDGET = 500 * 1024;
 const dist = join(import.meta.dirname, '..', 'dist');
 const files = [
   'index.html',
-  ...readdirSync(join(dist, 'assets')).map((f) => `assets/${f}`),
+  // The EPUB worker loads only when a download starts.
+  ...readdirSync(join(dist, 'assets'))
+    .filter((f) => !f.startsWith('worker-'))
+    .map((f) => `assets/${f}`),
   'data/catalog.json',
   'favicon.svg',
 ];

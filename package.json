@@ -9,12 +9,15 @@
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "catalog": "node scripts/build-catalog.ts",
+    "volumes": "node scripts/build-volumes.ts",
     "test": "vitest run",
+    "epubcheck": "node scripts/epub-check.ts",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "fonts": "python3 scripts/build-fonts.py",
     "size": "vite build && node scripts/size-report.ts"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "minisearch": "^7.2.0"
   },
   "devDependencies": {

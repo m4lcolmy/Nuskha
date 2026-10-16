@@ -33,12 +33,19 @@ export interface Hit {
   score: number;
 }
 
+const LINK = /^(?:https?:\/\/)?(?:www\.)?(?:shamela\.ws|(?:app\.)?turath\.io)\/book\/(\d+)(?:\/(\d+))?/i;
+
 /** Book id from a shamela.ws / turath.io link or a bare number (Arabic digits allowed). */
 export function parseBookRef(q: string): number | undefined {
   const s = toAsciiDigits(q.trim());
-  const m =
-    s.match(/^(?:https?:\/\/)?(?:www\.)?(?:shamela\.ws|(?:app\.)?turath\.io)\/book\/(\d+)/i) ?? s.match(/^#?(\d{1,7})$/);
+  const m = s.match(LINK) ?? s.match(/^#?(\d{1,7})$/);
   return m ? Number(m[1]) : undefined;
+}
+
+/** A pasted link: shamela.ws/book/8376/1672 → book 8376, page 1672 (page only if the link has one). */
+export function parseBookLink(q: string): { book: number; page?: number } | undefined {
+  const m = toAsciiDigits(q.trim()).match(LINK);
+  return m ? { book: Number(m[1]), page: m[2] ? Number(m[2]) : undefined } : undefined;
 }
 
 export class CatalogSearch {

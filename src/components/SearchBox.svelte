@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { store } from '../lib/catalog/store.svelte.ts';
   import { go, route } from '../lib/route.svelte.ts';
+  import { parseBookLink } from '../lib/search/search.ts';
   import { ui } from '../lib/ui.svelte.ts';
 
   let { large = false }: { large?: boolean } = $props();
@@ -9,8 +11,17 @@
     ui.searchInput = input;
   });
 
-  function oninput() {
+  function oninput(e?: Event) {
     const q = input.value;
+    // A pasted shamela.ws link goes straight to the book (and the volume of its page). Not while
+    // typing one: «…/book/8» is already a link.
+    const pasted = e instanceof InputEvent && (e.inputType === 'insertFromPaste' || e.inputType === 'insertFromDrop');
+    const link = pasted ? parseBookLink(q) : undefined;
+    if (link && store.catalog?.byId.has(link.book)) {
+      input.value = '';
+      go({ book: link.book, page: link.page });
+      return;
+    }
     // The first letter typed from another view adds a history entry; the rest replace it.
     const inResults = route.book === undefined && route.author === undefined && (route.q.trim() !== '' || route.cat !== undefined);
     go({ q, cat: route.book === undefined && route.author === undefined ? route.cat : undefined }, { replace: inResults });

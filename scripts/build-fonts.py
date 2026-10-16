@@ -1,4 +1,4 @@
-"""Subsets the site fonts to the characters Nuskha actually shows.
+"""Subsets the site fonts to the characters Nuskha actually shows, and builds the EPUB font.
 
 Sources are the full fonts from github.com/google/fonts (downloaded to .cache/fonts). The
 @fontsource "arabic" files can't be used: they lack «)» and «[», which breaks bracket
@@ -9,6 +9,10 @@ kept, so ligatures and mark positioning still work.
     python3 scripts/build-fonts.py      (needs fontTools and brotli)
 
 Re-run after the catalog is refreshed, so new titles don't fall back to a system font.
+
+The EPUB font (public/fonts/Amiri-Regular.ttf) is Amiri with every Arabic letter and all its
+OpenType features, but without the Latin, Greek and Cyrillic the books don't use. It stays a TTF:
+older readers (Kindle, Adobe) don't read woff2.
 """
 
 import json
@@ -36,6 +40,8 @@ FONTS = {
     "amiri-400.woff2": ("amiri/Amiri-Regular.ttf", None, PUNCT),
     "noto-naskh-arabic-400.woff2": ("notonaskharabic/NotoNaskhArabic%5Bwght%5D.ttf", {"wght": 400}, f"{PUNCT},{LATIN}"),
 }
+# Arabic blocks, presentation forms, punctuation, digits, Latin for numbers and the odd word.
+BOOK_FONT = "U+0020-007E,U+00A0-00FF,U+0600-06FF,U+0750-077F,U+08A0-08FF,U+2000-206F,U+FB50-FDFF,U+FE70-FEFF,U+25CC"
 LICENSE_FILES = {"OFL-Amiri.txt": "amiri/OFL.txt", "OFL-NotoNaskhArabic.txt": "notonaskharabic/OFL.txt"}
 
 
@@ -84,6 +90,20 @@ def main() -> None:
         out = OUT / name
         subset.save_font(font, str(out), opts)
         print(f"{out.relative_to(ROOT)}: {out.stat().st_size // 1024} KB")
+
+    opts = subset.Options()
+    opts.layout_features = ["*"]
+    opts.hinting = False
+    opts.name_IDs = ["*"]
+    opts.notdef_outline = True
+    font = TTFont(fetch(FONTS["amiri-400.woff2"][0]))
+    s = subset.Subsetter(opts)
+    s.populate(unicodes=subset.parse_unicodes(BOOK_FONT))
+    s.subset(font)
+    out = LICENSES / "Amiri-Regular.ttf"
+    LICENSES.mkdir(parents=True, exist_ok=True)
+    font.save(str(out))
+    print(f"{out.relative_to(ROOT)}: {out.stat().st_size // 1024} KB (EPUB font)")
 
     LICENSES.mkdir(parents=True, exist_ok=True)
     for name, src in LICENSE_FILES.items():

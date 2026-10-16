@@ -115,18 +115,18 @@ Nobody has to take all 14 volumes of البداية والنهاية to read the
   - Siyar ط الرسالة: «المقدمة» · «سيرة ١» · «سيرة ٢» · «راشدون» · ج١ «الطبقة الأولى» …
 
   These labels come from turath's index, which our weekly catalog job reads (index only, never the book text), and are
-  stored in small files loaded only when a book page opens. If a book has no stored list yet, the list appears right
-  after the download instead.
-- **Choices on the book page:**
-  - **الكتاب كاملًا**: one EPUB, each volume a top-level section of the table of contents.
-  - **one volume**: tap it in the list.
-  - **a range** (e.g. ج٣–ج٥) in one EPUB, for a period or a section that spans volumes.
-  - **all volumes, one file each**: saved as one .zip, since browsers block many downloads at once.
+  stored in small files loaded only when a book page opens. If a book has no stored list yet, the dropdown offers
+  «اختر جزءًا…», which reads the book first.
+- **Choices on the book page:** kept simple, one dropdown and one button.
+  - The dropdown: **الكتاب كاملًا** (one EPUB, each volume a top-level section of the table of contents), then
+    each volume with its label («ج٤ — سنة ثلاث من الهجرة»).
+  - The button says what it downloads: «تحميل الكتاب كاملًا» or «تحميل الجزء ٤», with the size.
+  - No ranges and no zip of all volumes: whole book or one volume is enough.
 - **A Shamela page link picks the volume:** pasting `shamela.ws/book/8376/1672` opens the book with the volume that
   contains that page already chosen.
-- **The biggest book** (124,569 pages) is offered per volume and by range only; one file that size would not open in readers.
+- **The biggest book** (124,569 pages) is offered per volume only; one file that size would not open in readers.
 - Everything runs in a background worker, so the page never freezes. A progress bar shows: تنزيل ← معالجة ← إنشاء.
-- The zip is made with **fflate** (small and fast), with `mimetype` first and uncompressed, as the EPUB rules require.
+- The EPUB zip is made with **fflate** (small and fast), with `mimetype` first and uncompressed, as the EPUB rules require.
 - turath's hidden keys are **not fixed**: the same field has a different key in different books (checked on 8376,
   22669, 10906, 17100), so the reader finds each field by its shape, not by its key.
 
@@ -196,11 +196,21 @@ Each step ends with something you check. I stop after each step and wait for you
 
 ### [ ] 3. Full-quality EPUB
 - Book download, text cleanup and the EPUB builder, in the background with a progress bar. epubcheck on the 4 test books.
-- Volumes: the volume list with labels; one volume, a range, the whole book, or all volumes as a .zip;
-  the book file kept in the browser.
+- Volumes: a dropdown with the whole book and each volume (with its label); the book file kept in the browser.
 - The look of the book: cloth-binding cover, title page, book card, «الفهرس», chapter openings, book colours
   that work in the reader's white, sepia and night modes.
 - **You check:** download 3–4 books and open them in your readers.
+  `npm run epubcheck` builds the 4 test books (whole and one volume) into `.cache/epub/` and checks them.
+
+**Notes from building it**
+- Honorific signs Amiri lacks (﵀ ﵁ ﷿ …) are written out as words («رحمه الله»); ﷺ ﷻ ﷽ stay as signs.
+- The footnote number is the back link (↩ is not in Amiri and shows as an emoji on Apple devices).
+- A sentence that runs over a page stays one paragraph, with the «[ج٣ ص١٢٤]» marker inside it.
+- The cover has no woven texture: any fine texture made the JPEG about 200 KB bigger.
+- Volume lists come from `npm run volumes`, which reads turath's index one book at a time. turath allows
+  a few hundred requests, then asks to wait up to an hour; the script then stops and the next run carries
+  on, biggest books first. For a book not listed yet, the dropdown has «اختر جزءًا…»: it downloads and reads
+  the book once (no file made), fills the dropdown with its volumes, and then any volume is made at once.
 
 ### [ ] 4. Put it online
 - GitHub Pages (free). The catalog refreshes once a week automatically.
