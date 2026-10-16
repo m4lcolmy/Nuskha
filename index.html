@@ -5,15 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>نسخة — المكتبة الشاملة، نسخةً في يدك</title>
     <meta name="description" content="ابحث في كتب المكتبة الشاملة وحمّلها بصيغة EPUB كاملة الجودة، في متصفحك ومجانًا." />
-    <meta name="theme-color" content="#f6f1e7" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#1c1714" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f6f1e7" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="preload" href="./data/catalog.json" as="fetch" crossorigin />
     <script>
-      // Apply the reader's day/night choice before the first paint.
+      // Day by default; apply the reader's night choice before the first paint.
       try {
-        const t = localStorage.getItem('theme');
-        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        if (localStorage.getItem('theme') === 'dark') {
+          document.documentElement.dataset.theme = 'dark';
+          document.querySelector('meta[name="theme-color"]').content = '#1c1714';
+        }
       } catch {}
     </script>
   </head>

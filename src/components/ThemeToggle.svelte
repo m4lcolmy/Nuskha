@@ -1,19 +1,12 @@
 <script lang="ts">
-  // Day / «قاعة المطالعة ليلًا». Follows the system until the reader picks; the pick is remembered.
-  const media = matchMedia('(prefers-color-scheme: dark)');
-  let systemDark = $state(media.matches);
-  let picked = $state(document.documentElement.dataset.theme as 'light' | 'dark' | undefined);
-  const dark = $derived(picked ? picked === 'dark' : systemDark);
-
-  $effect(() => {
-    const on = (e: MediaQueryListEvent) => (systemDark = e.matches);
-    media.addEventListener('change', on);
-    return () => media.removeEventListener('change', on);
-  });
+  // Day / «قاعة المطالعة ليلًا». Day by default; the reader's pick is remembered.
+  let dark = $state(document.documentElement.dataset.theme === 'dark');
 
   function toggle() {
-    picked = dark ? 'light' : 'dark';
+    dark = !dark;
+    const picked = dark ? 'dark' : 'light';
     document.documentElement.dataset.theme = picked;
+    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')!.content = dark ? '#1c1714' : '#f6f1e7';
     try {
       localStorage.setItem('theme', picked);
     } catch {

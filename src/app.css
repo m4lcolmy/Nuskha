@@ -41,30 +41,7 @@
   color-scheme: light;
 }
 
-/* «قاعة المطالعة ليلًا» — walnut and cream. Follows the system unless the reader picks. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --paper: #1c1714;
-    --paper-deep: #26201b;
-    --ink: #ece3d2;
-    --ink-soft: #bcae98;
-    --accent: #8fb79e;
-    --accent-ink: #1c1714;
-    --rule: #9b7b4c;
-    --rule-soft: #9b7b4c55;
-    --focus: #8fb79e;
-    --bind-aqida: #c47a72;
-    --bind-quran: #7fb59a;
-    --bind-hadith: #8aa3cc;
-    --bind-usul: #b593b8;
-    --bind-fiqh: #d1a05e;
-    --bind-raqaiq: #a9b273;
-    --bind-tarikh: #d08c6c;
-    --bind-lugha: #8fa9ba;
-    --bind-amma: #b3a593;
-    color-scheme: dark;
-  }
-}
+/* «قاعة المطالعة ليلًا» — walnut and cream. Day is the default; night only when the reader picks it. */
 :root[data-theme='dark'] {
   --paper: #1c1714;
   --paper-deep: #26201b;
