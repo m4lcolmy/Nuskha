@@ -24,9 +24,10 @@ export const CSS = `@charset "utf-8";
   src: url(../fonts/Amiri-Regular.ttf);
 }
 
-/* Vowelled Arabic needs tall lines: Amiri's own line is 1.76 em, and at a reader's usual 1.3 the
-   marks of one line run into the next. The line height is set on p as well, since many reading
-   apps put their own on body. */
+/* Vowelled Arabic needs tall lines: Amiri's own line is 1.76 em, and at a reader's usual 1.4 the
+   marks of one line run into the next. Reading apps put their own line height on body or p
+   (Readest adds "p { line-height: 1.4 }" after this sheet), so it is set again as "body p",
+   which outranks a bare p. */
 body {
   font-family: "Amiri", "Traditional Arabic", "Geeza Pro", serif;
   line-height: 2.2;
@@ -35,7 +36,8 @@ body {
   widows: 2;
   orphans: 2;
 }
-p { margin: 0 0 0.45em 0; text-indent: 0; line-height: 2.2; }
+p { margin: 0 0 0.45em 0; text-indent: 0; }
+body p { line-height: 2.2; }
 
 /* Headings: top level opens a chapter, centred, with a short rule and ۞ under it. */
 h1, h2, h3, h4, h5, h6 {
