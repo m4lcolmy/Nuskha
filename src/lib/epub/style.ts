@@ -29,13 +29,13 @@ export const CSS = `@charset "utf-8";
    apps put their own on body. */
 body {
   font-family: "Amiri", "Traditional Arabic", "Geeza Pro", serif;
-  line-height: 2;
+  line-height: 2.2;
   text-align: justify;
   margin: 0 4%;
   widows: 2;
   orphans: 2;
 }
-p { margin: 0 0 0.45em 0; text-indent: 0; line-height: 2; }
+p { margin: 0 0 0.45em 0; text-indent: 0; line-height: 2.2; }
 
 /* Headings: top level opens a chapter, centred, with a short rule and ۞ under it. */
 h1, h2, h3, h4, h5, h6 {
