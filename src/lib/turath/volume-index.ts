@@ -5,10 +5,10 @@
 import type { Volume, VolumeKind } from './volumes.ts';
 
 export const VOLUME_SHARDS = 32;
-export const VOLUME_FORMAT = 1;
+export const VOLUME_FORMAT = 2;
 
-/** [name, first page, page count, label, kind] */
-export type VolumeRow = [name: string, first: number, count: number, label: string, kind: VolumeKind];
+/** [name, first page, page count, label, kind, part, part that begins inside]; the last two left out when "". */
+export type VolumeRow = [name: string, first: number, count: number, label: string, kind: VolumeKind, part?: string, begins?: string];
 
 export interface VolumeShard {
   format: number;
@@ -17,8 +17,20 @@ export interface VolumeShard {
 
 export const shardOf = (id: number) => id % VOLUME_SHARDS;
 
-export const toRow = (v: Volume): VolumeRow => [v.name, v.first, v.count, v.label, v.kind];
-const fromRow = ([name, first, count, label, kind]: VolumeRow): Volume => ({ name, first, count, label, kind });
+export function toRow(v: Volume): VolumeRow {
+  const row: VolumeRow = [v.name, v.first, v.count, v.label, v.kind];
+  if (v.part || v.begins) row.push(v.part, ...(v.begins ? [v.begins] : []));
+  return row;
+}
+const fromRow = ([name, first, count, label, kind, part = '', begins = '']: VolumeRow): Volume => ({
+  name,
+  first,
+  count,
+  label,
+  kind,
+  part,
+  begins,
+});
 
 const shards = new Map<number, Promise<VolumeShard | undefined>>();
 

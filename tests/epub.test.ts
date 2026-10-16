@@ -69,6 +69,46 @@ describe('volumes', () => {
     ]);
   });
 
+  it("groups volumes by the book's own parts", () => {
+    // 6 volumes of 10 pages; parts start on pages 2 (after a short intro), 25 and 50.
+    const pageVols = Array.from({ length: 60 }, (_, i) => String(Math.floor(i / 10) + 1));
+    const vols = volumesOf(pageVols, [
+      { title: 'مقدمة المصنف', level: 1, page: 0 },
+      { title: 'كتاب المبتدأ', level: 1, page: 2 },
+      { title: 'باب', level: 2, page: 12 },
+      { title: 'كتاب السيرة', level: 1, page: 25 },
+      { title: 'كتاب الفتن', level: 1, page: 50 },
+    ]);
+    expect(vols.map((v) => [v.name, v.part, v.begins])).toEqual([
+      ['1', 'كتاب المبتدأ', ''],
+      ['2', 'كتاب المبتدأ', ''],
+      ['3', 'كتاب المبتدأ', 'كتاب السيرة'], // pages 20–29, half in each: the first wins, the next is noted
+      ['4', 'كتاب السيرة', ''],
+      ['5', 'كتاب السيرة', ''],
+      ['6', 'كتاب الفتن', ''],
+    ]);
+    // Most of volume 3 (pages 20–29) is in the second part.
+    const moved = volumesOf(pageVols.slice(0, 40), [
+      { title: 'كتاب المبتدأ', level: 1, page: 0 },
+      { title: 'كتاب السيرة', level: 1, page: 23 },
+    ]);
+    expect(moved.map((v) => [v.part, v.begins])[2]).toEqual(['كتاب السيرة', '']);
+  });
+
+  it('does not take volume names or one part for parts', () => {
+    const pageVols = ['1', '1', '2', '2', '3', '3'];
+    const byName = volumesOf(pageVols, [
+      { title: 'الجزء الأول', level: 1, page: 0 },
+      { title: 'الجزء الثاني', level: 1, page: 2 },
+    ]);
+    expect(byName.every((v) => v.part === '')).toBe(true);
+    const one = volumesOf(pageVols, [
+      { title: 'المقدمة', level: 1, page: 0 },
+      { title: 'كتاب الطهارة', level: 1, page: 1 },
+    ]);
+    expect(one.every((v) => v.part === '' && v.begins === '')).toBe(true);
+  });
+
   it('shortens long labels at a word', () => {
     const [v] = volumesOf(['1'], [{ title: 'كلمة '.repeat(30), level: 1, page: 0 }]);
     expect(v.label.endsWith('…')).toBe(true);

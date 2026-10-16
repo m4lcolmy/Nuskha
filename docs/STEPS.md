@@ -115,12 +115,15 @@ Nobody has to take all 14 volumes of البداية والنهاية to read the
   - Siyar ط الرسالة: «المقدمة» · «سيرة ١» · «سيرة ٢» · «راشدون» · ج١ «الطبقة الأولى» …
 
   These labels come from turath's index, which our weekly catalog job reads (index only, never the book text), and are
-  stored in small files loaded only when a book page opens. If a book has no stored list yet, the dropdown offers
+  stored in small files loaded only when a book page opens. If a book has no stored list yet, the page offers
   «اختر جزءًا…», which reads the book first.
-- **Choices on the book page:** kept simple, one dropdown and one button.
-  - The dropdown: **الكتاب كاملًا** (one EPUB, each volume a top-level section of the table of contents), then
-    each volume with its label («ج٤ — سنة ثلاث من الهجرة»).
-  - The button says what it downloads: «تحميل الكتاب كاملًا» or «تحميل الجزء ٤», with the size.
+- **Choices on the book page:** one main button, then a list of volumes under it.
+  - The main button: **تحميل الكتاب كاملًا** (one EPUB, each volume a top-level section of the table of contents), with the size.
+  - «أو حمّل جزءًا واحدًا» opens the list: each volume with its label («ج٤ — أوّله: سنة ثلاث من الهجرة»), its pages,
+    and its own «تحميل» button. A list on the page, not a `<select>`: a system menu cuts long names and can't show
+    a second line.
+  - When the book's own top headings divide it into a few parts («كتاب المبتدأ وقصص الأنبياء», «كتاب سيرة رسول الله ﷺ»),
+    the volumes are grouped under them, and a part that starts inside a volume is noted on it («وفيه يبدأ: …»).
   - No ranges and no zip of all volumes: whole book or one volume is enough.
 - **A Shamela page link picks the volume:** pasting `shamela.ws/book/8376/1672` opens the book with the volume that
   contains that page already chosen.
@@ -196,7 +199,7 @@ Each step ends with something you check. I stop after each step and wait for you
 
 ### [ ] 3. Full-quality EPUB
 - Book download, text cleanup and the EPUB builder, in the background with a progress bar. epubcheck on the 4 test books.
-- Volumes: a dropdown with the whole book and each volume (with its label); the book file kept in the browser.
+- Volumes: a button for the whole book and a list of volumes (with labels, grouped by part); the book file kept in the browser.
 - The look of the book: cloth-binding cover, title page, book card, «الفهرس», chapter openings, book colours
   that work in the reader's white, sepia and night modes.
 - **You check:** download 3–4 books and open them in your readers.
@@ -209,8 +212,9 @@ Each step ends with something you check. I stop after each step and wait for you
 - The cover has no woven texture: any fine texture made the JPEG about 200 KB bigger.
 - Volume lists come from `npm run volumes`, which reads turath's index one book at a time. turath allows
   a few hundred requests, then asks to wait up to an hour; the script then stops and the next run carries
-  on, biggest books first. For a book not listed yet, the dropdown has «اختر جزءًا…»: it downloads and reads
-  the book once (no file made), fills the dropdown with its volumes, and then any volume is made at once.
+  on, biggest books first. For a book not listed yet, the page has «اختر جزءًا…»: it downloads and reads
+  the book once (no file made), shows the list of its volumes, and then any volume is made at once.
+  `npm run volumes -- --cached` rebuilds the lists from the kept indexes without asking turath.
 
 ### [ ] 4. Put it online
 - GitHub Pages (free). The catalog refreshes once a week automatically.

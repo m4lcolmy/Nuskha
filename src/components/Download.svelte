@@ -1,7 +1,9 @@
 <script lang="ts">
-  // The download on a book's title page: for a book with volumes, one dropdown (the whole book, or
-  // one volume), then one button that says what it will download. Progress shows here, and the file
-  // saves by itself.
+  // The download on a book's title page: one button for the whole book, and for a book with volumes
+  // a list of them under it, grouped by the book's own parts when it has them («كتاب سيرة رسول الله ﷺ»
+  // ج٣–ج٩), each with its own button. A list on the page, not a <select>: the system draws a select's
+  // menu (on Linux it covers the page and cuts long names), and it can't show a second line.
+  // Progress shows next to the button pressed, and the file saves by itself.
   import type { Book } from '../lib/catalog/types.ts';
   import { cancel, download, isKept, save, start } from '../lib/download.svelte.ts';
   import { WHOLE_MAX_BYTES, type Choice } from '../lib/epub/protocol.ts';
@@ -11,22 +13,19 @@
 
   let { book, page }: { book: Book; page?: number } = $props();
 
-  /** Dropdown values besides volume names. */
-  const WHOLE = '';
-  const LIST = '\u0000list';
-
   let stored: Volume[] | undefined = $state.raw();
   let kept = $state(false);
-  /** WHOLE, a volume name, or LIST (read the book to show its volumes). */
-  let chosen = $state(WHOLE);
-  let preset = false; // the page link or size has picked the starting volume
+  /** What was last started here, so its progress shows next to its button. */
+  let active: Choice = $state.raw({ kind: 'whole' });
+  let open = $state(false);
+  let opened = false; // the list has been opened once by itself
 
   $effect(() => {
     const id = book.id;
     stored = undefined;
     kept = false;
-    chosen = WHOLE;
-    preset = false;
+    active = { kind: 'whole' };
+    open = opened = false;
     storedVolumes(id).then((v) => {
       if (book.id === id) stored = v;
     });
@@ -44,15 +43,27 @@
   const mayHaveVolumes = $derived(book.volumes > 1 || (book.volumes === 0 && book.pages >= 800));
   /** The biggest books would not open in readers as one file. */
   const tooBig = $derived(book.size > WHOLE_MAX_BYTES);
+  /** The volume holding the Shamela page the link pointed to. */
+  const pointed = $derived(
+    page === undefined || !volumes ? undefined : volumes.find((x) => page - 1 >= x.first && page - 1 < x.first + x.count),
+  );
 
-  // Start on the volume a Shamela page link points to; a book too big for one file starts at its first volume.
+  /** Runs of volumes in the same part of the book; one run with no part for most books. */
+  const groups = $derived.by(() => {
+    const gs: { part: string; vols: Volume[] }[] = [];
+    for (const v of multi ? volumes! : []) {
+      const g = gs.at(-1);
+      if (g && g.part === v.part) g.vols.push(v);
+      else gs.push({ part: v.part, vols: [v] });
+    }
+    return gs;
+  });
+
+  // Open the list by itself when it is the way to download: the book is too big for one file, a page
+  // link points into a volume, or the reader asked to see the volumes.
   $effect(() => {
-    if (volumes && !multi && chosen === LIST) chosen = WHOLE; // it turned out to be one volume
-    if (!volumes || !multi || preset) return;
-    preset = true;
-    const v = page === undefined ? undefined : volumes.find((x) => page! - 1 >= x.first && page! - 1 < x.first + x.count);
-    if (v) chosen = v.name;
-    else if (tooBig || chosen === LIST) chosen = volumes[0].name;
+    if (!multi || opened) return;
+    if (tooBig || pointed || active.kind === 'list') open = opened = true;
   });
 
   // Once the book has been read here (a file made, or its volumes listed), it is kept in the browser.
@@ -60,18 +71,19 @@
     if (mine && (download.stage === 'done' || download.volumes?.bookId === book.id)) kept = true;
   });
 
-  const volume = $derived(multi ? volumes!.find((v) => v.name === chosen) : undefined);
-  const choice: Choice = $derived(volume ? { kind: 'volume', name: volume.name } : { kind: 'whole' });
-  /** What the button downloads: «الكتاب كاملًا», «الجزء ٤», or «الكتاب» for a one-volume book. */
-  const what = $derived(volume ? volLong(volume.name) : multi || (mayHaveVolumes && !volumes) ? 'الكتاب كاملًا' : 'الكتاب');
+  /** What the main button downloads: «الكتاب كاملًا», or «الكتاب» for a one-volume book. */
+  const what = $derived(multi || (mayHaveVolumes && !volumes) ? 'الكتاب كاملًا' : 'الكتاب');
 
-  function onchange() {
-    // No stored list: read the book once, then the dropdown fills with its volumes.
-    if (chosen === LIST) start(book, { kind: 'list' });
+  function go(choice: Choice) {
+    active = choice;
+    start(book, choice);
   }
 
-  const option = (v: Volume) =>
-    `${volShort(v.name)}${v.label ? ` — ${v.label}` : ''}${v.kind ? ` (${v.kind === 'index' ? 'فهارس' : 'مقدمة'})` : ''}`;
+  /** Whether the progress or result of `choice` belongs here: the last one started on this book. */
+  const at = (choice: Choice) =>
+    mine &&
+    (active.kind === choice.kind || (active.kind === 'list' && choice.kind === 'whole')) &&
+    (choice.kind !== 'volume' || (active.kind === 'volume' && active.name === choice.name));
 
   const STAGES = [
     ['download', 'تنزيل'],
@@ -81,39 +93,8 @@
   const stageIndex = $derived(STAGES.findIndex(([k]) => k === download.stage));
 </script>
 
-<div class="download">
-  {#if multi && volumes}
-    <label class="visually-hidden" for="volume">ما تريد تحميله</label>
-    <select id="volume" bind:value={chosen} disabled={busy}>
-      {#if !tooBig}<option value={WHOLE}>الكتاب كاملًا ({count(volumes.length, NOUNS.part)})</option>{/if}
-      <optgroup label="الأجزاء">
-        {#each volumes as v (v.name)}
-          <option value={v.name}>{option(v)}</option>
-        {/each}
-      </optgroup>
-    </select>
-    {#if tooBig}<p class="hint">الكتاب أكبر من أن يُفتح في ملف واحد، فيُحمَّل جزءًا جزءًا.</p>{/if}
-  {:else if mayHaveVolumes && !volumes}
-    <label class="visually-hidden" for="volume">ما تريد تحميله</label>
-    <select id="volume" bind:value={chosen} {onchange} disabled={busy}>
-      <option value={WHOLE}>الكتاب كاملًا</option>
-      <option value={LIST}>اختر جزءًا… (يُنزَّل الكتاب أولًا)</option>
-    </select>
-  {/if}
-
-  {#if chosen !== LIST}
-    <button class="primary" disabled={busy} onclick={() => start(book, choice)}>
-      <span class="label">تحميل {what}</span>{#if !kept}<span class="size">{size(book.size)}</span>{/if}
-    </button>
-    {#if !busy}
-      <!-- Never end on «EPUB»: a full stop after Latin shows on the wrong side. -->
-      <p class="hint">
-        {kept ? 'بصيغة EPUB، والكتاب محفوظ في متصفحك فيُنشأ الملف فورًا.' : 'بصيغة EPUB، ويُحفظ الكتاب في متصفحك لما بعدُ.'}
-      </p>
-    {/if}
-  {/if}
-
-  {#if busy}
+{#snippet status(choice: Choice)}
+  {#if at(choice) && busy}
     <div class="progress" role="status" aria-live="polite">
       <ol class="stages">
         {#each STAGES as [key, name], i (key)}
@@ -123,18 +104,83 @@
       <div class="bar" aria-hidden="true"><div style:width="{Math.round(download.fraction * 100)}%"></div></div>
       <button class="link" onclick={cancel}>إلغاء</button>
     </div>
-  {:else if mine && download.stage === 'done' && download.file}
+  {:else if at(choice) && download.stage === 'done' && download.file}
     <p class="done" role="status">
       تمّ. حُفظ الملف «{download.file.name}».
       <button class="link" onclick={() => save(download.file!.url, download.file!.name)}>احفظه مرة أخرى</button>
     </p>
-  {:else if mine && download.stage === 'error'}
+  {:else if at(choice) && download.stage === 'error'}
     <p class="error" role="alert">
       {download.network
         ? 'تعذّر تنزيل الكتاب. تحقّق من الاتصال ثم أعد المحاولة.'
         : 'تعذّر إنشاء الملف من هذا الكتاب.'}
-      <button class="link" onclick={() => start(book, chosen === LIST ? { kind: 'list' } : choice)}>أعد المحاولة</button>
+      <button class="link" onclick={() => go(active)}>أعد المحاولة</button>
     </p>
+  {/if}
+{/snippet}
+
+<div class="download">
+  {#if !(multi && tooBig)}
+    <button class="primary" disabled={busy} onclick={() => go({ kind: 'whole' })}>
+      <span class="label">تحميل {what}</span>{#if !kept}<span class="size">{size(book.size)}</span>{/if}
+    </button>
+    {#if !(at({ kind: 'whole' }) && (busy || download.stage === 'error'))}
+      <!-- Never end on «EPUB»: a full stop after Latin shows on the wrong side. -->
+      <p class="hint">
+        {kept ? 'بصيغة EPUB، والكتاب محفوظ في متصفحك فيُنشأ الملف فورًا.' : 'بصيغة EPUB، ويُحفظ الكتاب في متصفحك لما بعدُ.'}
+      </p>
+    {/if}
+    {@render status({ kind: 'whole' })}
+  {/if}
+
+  {#if multi && volumes}
+    <details class="volumes" bind:open>
+      <summary>
+        {tooBig ? 'اختر جزءًا لتحميله' : 'أو حمّل جزءًا واحدًا'}
+        <span class="n">{count(volumes.length, NOUNS.part)}</span>
+      </summary>
+      {#if tooBig}
+        <p class="hint">الكتاب أكبر من أن يُفتح في ملف واحد، فيُحمَّل جزءًا جزءًا.</p>
+      {/if}
+      {#if !kept}
+        <p class="hint">يُنزَّل الكتاب كله أول مرة ({size(book.size)})، ثم يُنشأ كل جزء منه فورًا.</p>
+      {/if}
+      {#each groups as g, gi (gi)}
+        <section class="group">
+          {#if g.part}<h3 class="part">{g.part}</h3>{/if}
+          <ul>
+            {#each g.vols as v (v.name)}
+              {@const choice = { kind: 'volume', name: v.name } satisfies Choice}
+              <li class:here={v === pointed}>
+                <div class="row">
+                  <span class="vol">{volShort(v.name)}</span>
+                  <div class="what">
+                    {#if v.label}<span class="label"><span class="lead">أوّله:</span> {v.label}</span>{/if}
+                    <span class="meta">
+                      <span>{count(v.count, NOUNS.page)}</span>
+                      {#if v.kind}<span class="tag">{v.kind === 'index' ? 'فهارس' : 'مقدمة'}</span>{/if}
+                      {#if v === pointed}<span class="tag">فيه الصفحة المطلوبة</span>{/if}
+                    </span>
+                    {#if v.begins}<span class="begins">وفيه يبدأ: {v.begins}</span>{/if}
+                  </div>
+                  <button class="get" disabled={busy} onclick={() => go(choice)} aria-label="تحميل {volLong(v.name)}">
+                    تحميل
+                  </button>
+                </div>
+                {@render status(choice)}
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/each}
+    </details>
+  {:else if mayHaveVolumes && !volumes}
+    {#if !(at({ kind: 'list' }) && (busy || download.stage === 'error'))}
+      <button class="link more" disabled={busy} onclick={() => go({ kind: 'list' })}>
+        اختر جزءًا… (يُنزَّل الكتاب أولًا)
+      </button>
+    {/if}
+    {@render status({ kind: 'list' })}
   {/if}
 </div>
 
@@ -144,23 +190,6 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-  }
-  select {
-    font: inherit;
-    font-size: 1rem;
-    color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--rule);
-    border-radius: 2px;
-    padding: 6px 10px;
-    margin-bottom: 12px;
-    width: 100%;
-    max-width: 420px;
-    cursor: pointer;
-  }
-  select:disabled {
-    opacity: 0.6;
-    cursor: default;
   }
   .primary {
     background: var(--accent);
@@ -261,6 +290,130 @@
   .error .link {
     font-size: 0.9rem;
     margin-inline-start: 6px;
+  }
+  .more {
+    margin-top: 14px;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+  .more:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .volumes {
+    margin-top: 22px;
+    width: 100%;
+    max-width: 520px;
+    text-align: start;
+  }
+  summary {
+    cursor: pointer;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+    padding: 4px 0;
+  }
+  summary:hover {
+    color: var(--ink);
+  }
+  summary .n {
+    unicode-bidi: isolate;
+    margin-inline-start: 0.4em;
+    font-size: 0.85rem;
+  }
+  .volumes > .hint {
+    margin-bottom: 4px;
+  }
+  .group {
+    margin-top: 14px;
+  }
+  .part {
+    font: inherit;
+    font-family: var(--serif);
+    font-size: 1.05rem;
+    color: var(--accent);
+    margin: 0 0 2px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--rule);
+  }
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  li {
+    border-bottom: 1px solid var(--rule-soft);
+    padding: 8px 6px;
+  }
+  li.here {
+    background: var(--paper-deep);
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .vol {
+    flex: none;
+    min-width: 2.6em;
+    font-family: var(--serif);
+    font-size: 1.05rem;
+    unicode-bidi: isolate;
+  }
+  .what {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.6;
+  }
+  .what .label {
+    font-size: 0.95rem;
+    unicode-bidi: normal;
+    overflow-wrap: anywhere;
+  }
+  .lead {
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 10px;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+  .tag {
+    color: var(--accent);
+  }
+  .begins {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+  .get {
+    flex: none;
+    background: none;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 2px;
+    padding: 2px 14px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .get:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .get:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  li .progress,
+  li .done,
+  li .error {
+    max-width: none;
+    margin-top: 8px;
+    text-align: center;
   }
   @media (max-width: 480px) {
     .primary {

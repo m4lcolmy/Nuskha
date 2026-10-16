@@ -9,6 +9,7 @@
 //
 //   node scripts/build-volumes.ts                 after `npm run catalog`
 //   node scripts/build-volumes.ts --max-age 0     fetch every index again
+//   node scripts/build-volumes.ts --cached        fetch nothing, use the kept indexes
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
@@ -30,8 +31,8 @@ const outDir = join(root, 'public', 'data', 'volumes');
 const args = process.argv.slice(2);
 const ageAt = args.indexOf('--max-age');
 const maxAgeDays = ageAt >= 0 ? Number(args[ageAt + 1]) : 90;
-/** Set when turath asks for a long wait: from then on, only cached indexes are used. */
-let blocked = false;
+/** Set when turath asks for a long wait (or by --cached): from then on, only cached indexes are used. */
+let blocked = args.includes('--cached');
 
 /** What we keep of an index: volume runs in page order, and the headings. */
 interface Cached {
