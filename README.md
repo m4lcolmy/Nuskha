@@ -52,12 +52,20 @@ Then open the link it prints.
 | `npm run epubcheck` | Build 4 test books and check them |
 | `npm run size` | Show the size of the built site |
 
+## Online
+
+https://m4lcolmy.github.io/Nuskha/
+
+Every push to `main` builds and publishes the site (GitHub Pages).
+Every Friday the book list and volume lists are refreshed from turath.
+
 ## Project layout
 
 - `src/` – the website (Svelte)
 - `src/lib/epub/` – the EPUB builder
 - `src/lib/search/` – Arabic search
 - `scripts/` – data and font scripts
+- `.github/workflows/` – deploy and weekly refresh
 - `public/data/` – the book list and volume lists
 - `tests/` – tests
 - `docs/STEPS.md` – the plan

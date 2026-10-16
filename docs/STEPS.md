@@ -220,6 +220,14 @@ Each step ends with something you check. I stop after each step and wait for you
 - GitHub Pages (free). The catalog refreshes once a week automatically.
 - **You check:** the live link works everywhere.
 
+**Notes from building it**
+- `.github/workflows/deploy.yml`: every push to `main` runs the tests, builds, and publishes `dist/` to
+  https://m4lcolmy.github.io/Nuskha/. In the repo's Settings → Pages, Source must be «GitHub Actions».
+- `.github/workflows/refresh.yml`: every Friday, `npm run catalog` and `npm run volumes`; if `public/data`
+  changed, it commits and starts a deploy. It can also be started by hand from the Actions tab.
+  turath's indexes are kept in the Actions cache between runs. If that cache has expired, the volume script
+  keeps the lists it already has, so a run never loses lists.
+
 ## Later (only if wanted)
 - Search inside book text
 - PDF with selectable Arabic text

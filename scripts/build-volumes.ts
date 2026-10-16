@@ -5,7 +5,9 @@
 // are kept in .cache/indexes and fetched again only when older than --max-age days (default 90),
 // one at a time, to be gentle on turath. turath allows a few hundred requests and then asks to wait
 // (HTTP 429, sometimes for most of an hour): the run then stops fetching and writes the lists it
-// has, and the next run carries on where this one stopped.
+// has, and the next run carries on where this one stopped. A book whose index is neither cached nor
+// fetched keeps the list it already has in public/data/volumes, so a run without the cache (as on
+// GitHub, when its cache has expired) never loses lists.
 //
 //   node scripts/build-volumes.ts                 after `npm run catalog`
 //   node scripts/build-volumes.ts --max-age 0     fetch every index again
@@ -54,7 +56,8 @@ const candidates = found.sort((x, y) => y[1] - x[1]).map(([i]) => i);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function index(id: number): Promise<Cached | undefined> {
+/** The book's index; null if turath no longer has the book, undefined if it could not be read. */
+async function index(id: number): Promise<Cached | null | undefined> {
   const path = join(cacheDir, `${id}.json`);
   const cached = () => (existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as Cached) : undefined);
   if (blocked || (existsSync(path) && (Date.now() - statSync(path).mtimeMs) / 86_400_000 < maxAgeDays)) return cached();
@@ -62,7 +65,7 @@ async function index(id: number): Promise<Cached | undefined> {
     try {
       await sleep(PAUSE_MS);
       const res = await fetch(API(id), { signal: AbortSignal.timeout(60_000) });
-      if (res.status === 404) return undefined;
+      if (res.status === 404) return null;
       if (res.status === 429) {
         const wait = Number(res.headers.get('retry-after')) || 30 * attempt;
         if (wait > 120 || attempt >= 4) {
@@ -103,9 +106,16 @@ async function index(id: number): Promise<Cached | undefined> {
 }
 
 const shards: VolumeShard[] = Array.from({ length: VOLUME_SHARDS }, () => ({ format: VOLUME_FORMAT, books: {} }));
+/** The lists written last time, for books whose index can't be read now. */
+const old: VolumeShard[] = shards.map((_, n) => {
+  const path = join(outDir, `${n}.json`);
+  const s = existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as VolumeShard) : undefined;
+  return s?.format === VOLUME_FORMAT ? s : { format: VOLUME_FORMAT, books: {} };
+});
 let next = 0;
 let done = 0;
 let listed = 0;
+let kept = 0;
 
 async function run() {
   while (next < candidates.length) {
@@ -124,6 +134,10 @@ async function run() {
         shards[shardOf(id)].books[id] = volumes.map(toRow);
         listed++;
       }
+    } else if (data === undefined && old[shardOf(id)].books[id]) {
+      shards[shardOf(id)].books[id] = old[shardOf(id)].books[id];
+      listed++;
+      kept++;
     }
     if (++done % 100 === 0) console.log(`${done}/${candidates.length}`);
   }
@@ -145,6 +159,7 @@ shards.forEach((s, n) => {
 const missing = candidates.filter((i) => !existsSync(join(cacheDir, `${i}.json`))).length;
 console.log(
   `wrote ${outDir}: ${listed} books with several volumes (of ${candidates.length - missing} checked` +
-    `${missing ? `; ${missing} not fetched yet, run again later` : ''}); ` +
+    `${missing ? `; ${missing} not fetched yet, run again later` : ''}` +
+    `${kept ? `; ${kept} kept from the last run` : ''}); ` +
     `${Math.round(raw / 1024)} KB raw, ${Math.round(gz / 1024)} KB gzipped in ${VOLUME_SHARDS} files`,
 );
