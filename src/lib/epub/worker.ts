@@ -2,6 +2,8 @@
 // Runs off the main thread so the page never freezes. The last book read stays in memory, so a
 // second volume of the same book is made at once.
 
+import { buildTypst } from '../pdf/build.ts';
+import { COVER_PATH } from '../pdf/protocol.ts';
 import { parseBook, type TurathBook } from '../turath/book.ts';
 import { volLong, volumesOf, type Volume } from '../turath/volumes.ts';
 import { buildEpub } from './build.ts';
@@ -55,17 +57,27 @@ async function make(m: Extract<ToWorker, { type: 'make' }>) {
     post({ type: 'listed', job: m.job });
     return;
   }
-  font ??= fetch(m.fontUrl)
-    .then((r) => (r.ok ? r.arrayBuffer() : undefined))
-    .then((b) => (b ? new Uint8Array(b) : undefined))
-    .catch(() => undefined);
-  const fontBytes = await font;
 
   // The chosen volume, or the whole book (also if the book has no volume of that name).
   const choice = m.choice;
   const i = choice.kind === 'volume' ? volumes.findIndex((v) => v.name === choice.name) : -1;
   const [from, to] = i >= 0 ? [i, i] : [0, volumes.length - 1];
-  const cover = await askCover(i >= 0 ? volLong(volumes[i].name) : '');
+  const base = i >= 0 ? volumeFile(m.fileBase, volumes, i) : m.fileBase;
+  const volNote = i >= 0 ? volLong(volumes[i].name) : '';
+
+  if (m.format.kind === 'pdf') {
+    const size = m.format.size;
+    const doc = buildTypst({ book, meta: m.meta, volumes, from, to, size, cover: COVER_PATH, onProgress: (f) => progress('process', f) });
+    const name = `${base}${size === '17x24' ? ' - 17×24' : ''}.pdf`;
+    post({ type: 'doc', job: m.job, name, doc, volNote });
+    return;
+  }
+  font ??= fetch(m.fontUrl)
+    .then((r) => (r.ok ? r.arrayBuffer() : undefined))
+    .then((b) => (b ? new Uint8Array(b) : undefined))
+    .catch(() => undefined);
+  const fontBytes = await font;
+  const cover = await askCover(volNote);
   const bytes = buildEpub({
     book,
     meta: m.meta,
@@ -76,7 +88,7 @@ async function make(m: Extract<ToWorker, { type: 'make' }>) {
     cover,
     onProgress: (f) => progress(f < 1 ? 'process' : 'build', f),
   });
-  const name = `${i >= 0 ? volumeFile(m.fileBase, volumes, i) : m.fileBase}.epub`;
+  const name = `${base}.epub`;
   post({ type: 'done', job: m.job, name, bytes, mime: 'application/epub+zip' }, [bytes.buffer]);
 }
 

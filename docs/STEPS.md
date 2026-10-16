@@ -1,6 +1,6 @@
 # Nuskha (نسخة) — Plan
 
-**Goal:** search any Shamela book and download a **full-quality EPUB**, from a simple website that feels like a library.
+**Goal:** search any Shamela book and download a **full-quality EPUB** or a **print-quality PDF**, from a simple website that feels like a library.
 Everything runs in the visitor's browser, so there is no server and hosting is free.
 
 ## Where the books come from
@@ -136,7 +136,7 @@ Nobody has to take all 14 volumes of البداية والنهاية to read the
 ### Steps we skip
 Things a user would otherwise have to do, which Nuskha does for them:
 - **No settings screen before downloading.** Good defaults (keep harakat, Amiri, pop-up footnotes). Options can come later.
-- **No format choice.** EPUB only, so one button.
+- **No format screen.** «تحميل EPUB» and «تحميل PDF» sit side by side on the book page.
 - **No volume question for one-volume books.** One button, done.
 - **No "this is a big file, continue?" dialog.** The size is on the button instead: «تحميل EPUB · ٦ م.ب».
 - **No separate download screen.** The progress bar is on the book page, and the file saves by itself when ready.
@@ -184,6 +184,66 @@ Test with the longest real titles and on Android, iPhone, Windows and Mac.
 
 ---
 
+## 4. PDF: like a professionally printed book
+
+**Idea:** the PDF should look like a good Beirut or Cairo printing of the book: fixed pages, footnotes at the foot
+of the page they belong to, running heads, a «الفهرس» with real page numbers. And the text must still select, copy
+and search correctly. That is what EPUB can't give: the same page for everyone, to print, cite or read as pages.
+
+### The engine: Typst, in the visitor's browser
+A real typesetting engine, compiled to WebAssembly (**typst.ts**), runs in a background worker of its own.
+- **Why not "print to PDF" from the browser:** Chrome can't put footnotes at the foot of the page, can't number a
+  contents page, and needs the print dialog (and «Headers and footers: off»); Firefox and Safari print differently
+  again. Typst does all of it the same way on every browser, phones included, and the file downloads directly.
+- **What it costs:** 11 MB (the 28 MB of WebAssembly, gzipped), fetched only the first time someone asks for a PDF,
+  then kept in the browser. The site itself stays as small as it is.
+- **Checked first, not assumed** (the first part of step 5): Typst against Chrome print with Paged.js, on the same
+  chapter of Siyar. Compared on: how the page looks, word accuracy of the text layer (Typst scored 84–94% in the
+  earlier test in [old/PLAN-full.md](old/PLAN-full.md), Chrome 87–93%), and the time to build an 800-page volume
+  on a phone. If Typst loses clearly, the PDF uses Chrome print with Paged.js and a short guide to the print dialog.
+
+### The page
+- **Two sizes, one button each:** **A5** (default: reads well on a phone, a tablet and an e-reader) and **17×24 cm**,
+  the usual size of Arabic scholarly books, for printing. The 17×24 version has mirrored margins (wider inside, for
+  binding) and starts each chapter on an odd page (in an Arabic book, the left-hand page); the blank page this
+  may take has no running head.
+- **Type:** Amiri as in the EPUB, about 12.5 pt on A5, line height 1.9 (measured: the tightest that keeps the
+  vowel marks of two lines apart), justified. Arabic-Indic digits everywhere.
+- **Running heads:** the book's title on one page, the current chapter on the facing page, with a thin rule under
+  them. The page number at the outer corner. No head on chapter openings.
+- **Footnotes at the foot of the page**, under a short rule, smaller type, numbered from ١ on each page like
+  printed Arabic books. A footnote too long for its page carries on to the next, as in print.
+- **Printed-edition pages:** «[ص١٣٥]» stays in the text as in the EPUB, and the head shows which pages of the
+  printed edition this page covers («ص ١٣٥–١٣٦»), so a citation can be read off any page.
+- **No stranded lines:** headings never sit alone at the foot of a page, and no single line of a paragraph is left
+  alone at the top or foot of a page.
+- **Colours:** the same rubrication red for headings and green for Quran as the EPUB, chosen to print well in
+  greyscale too.
+
+### The book
+- **Opening pages:** the cover (the same cloth-binding design, as a full page), the title page, the book card.
+- **«الفهرس» at the end**, where Arabic books put it, with real page numbers and dotted leaders, every entry a link.
+- **PDF bookmarks** from the headings (nested), so readers show a contents side panel.
+- **Links:** footnote numbers jump to the note and back.
+- **File details:** title, author, `lang="ar"`, right-to-left reading order (so two-page view puts page 1 on the
+  right), the source note. Fonts embedded as subsets.
+- **Volumes:** the same choices as the EPUB: one volume, or the whole book. At most 1,000 book pages in one PDF
+  (a phone runs out of memory past that), so bigger books come per volume.
+
+### Text that copies right
+- The font is static Amiri (variable fonts ruined the text layer, 3–20%, in the earlier test).
+- **A hidden text layer**, as in scanned books with OCR: the printed glyphs read as spaces, and every word is
+  written again, invisibly, at the place Typst reports for it, in the order viewers expect (each line left to
+  right, letters in visual order, real spaces between words). Without it, fully vowelled text copies at 8–30%.
+- A quality check in the tests: build three fixture books, extract them with **pdf.js** (Firefox, most web and
+  Android viewers) and **PDFium** (Chrome, Edge), and fail below **95%** of words correct, and in order.
+
+### Steps we skip
+- **No print dialog** and no settings to explain: the PDF downloads like the EPUB.
+- **No layout options** beyond the page size. One good design.
+
+---
+
 ## Build steps
 
 Each step ends with something you check. I stop after each step and wait for your OK.
@@ -228,9 +288,101 @@ Each step ends with something you check. I stop after each step and wait for you
   turath's indexes are kept in the Actions cache between runs. If that cache has expired, the volume script
   keeps the lists it already has, so a run never loses lists.
 
+### [ ] 5. Print-quality PDF
+- **First, a check:** one chapter of Siyar (vowelled, many footnotes) made with Typst and with Chrome print plus
+  Paged.js. Pages side by side, text-layer accuracy in pdf.js and PDFium, time for 800 pages on a phone.
+  **You choose the engine** from the two PDFs.
+- The PDF builder: the same parsed pages, footnotes and headings as the EPUB, written as Typst instead of XHTML,
+  then the layout above: A5 and 17×24, running heads, footnotes at the foot of the page, «الفهرس» with page numbers,
+  bookmarks, links, right-to-left reading order.
+- On the book page: «تحميل PDF» next to the EPUB button, with the size choice under it; the same progress bar
+  (the engine is fetched once, then kept).
+- The text-layer check in `npm test`, failing below 95%.
+- **You check:** download a small book, a book with many footnotes, and one volume of البداية والنهاية. Open them on
+  your phone and computer, print a few pages, and copy a paragraph with vowel marks into a search box.
+
+**The engine check (2026-10-16)**
+
+Same pages, same parser (`renderPage`), same type (Amiri 12.5 pt, A5, line height 1.9). Typst 0.14.2 through
+typst.ts 0.7.0 (the WebAssembly build the site would use); Chrome 155 printing with Paged.js 0.4.3.
+The PDFs are in `.cache/pdf/check/`.
+
+| | Typst | Chrome + Paged.js |
+|---|---|---|
+| Siyar «بقية العشرة» (94 pages, 5 notes a page) | 133 pages, 2.1 s | 136 pages, 2.5 s + print |
+| Siyar vol. 12 (739 pages) | 938 pages: 8.6 s in Chrome, **36 s at 4× slower CPU** (a mid-range phone) | stopped after 887 pages; not done after 10 min |
+| Footnotes at the foot of the page | yes; long notes carry on to the next page | yes, but numbering does not restart per page (`counter-reset` ignored) |
+| Running heads, odd/even pages | yes | only with more work; `:left`/`:right` assume left-to-right books |
+| Right to left | works | lays out nothing past page 1 unless the page frame is left-to-right and only the text right-to-left |
+| Bookmarks, «الفهرس» page numbers, links | yes | bookmarks yes; page numbers via `target-counter` |
+| The file | bytes in the page: downloads directly, can be fixed up after | goes through the print dialog; the page never gets the file |
+| Size | 1.6 MB for 133 pages; vol. 12 is 10 MB (6 MB of it tagged-PDF structure and links, which typst.ts can't switch off) | 1.2 MB for 136 pages |
+
+Text layer, words correct (pdf.js = Firefox and web viewers, PDFium = Chrome and Edge):
+
+| | Typst pdf.js | Typst PDFium | Chrome pdf.js | Chrome PDFium |
+|---|---|---|---|---|
+| Siyar chapter (hardly any vowel marks, 30k words) | 90.5% | **98.1%** | 90.6% | 96.8% |
+| رياض الصالحين 12014, pages 21–80 (fully vowelled, 10k words) | **8.6%** | **30.0%** | **11.0%** | **25.0%** |
+
+- **Vowelled text breaks in both engines.** Typst draws every letter that carries a mark as its own piece of
+  text at its own height; the viewers read those pieces as separate lines and put them back in the wrong order
+  («قَالَ» → «قَلاَ», marks doubled). Chrome's PDFs fail the same way. Typst also writes the right text as
+  `ActualText` for some letters, but pdf.js reads ActualText only for screen readers, never for copy and search.
+  The earlier 84–94% (old plan) was measured on Siyar, which has almost no marks.
+- In unvowelled text the losses are: a word glued to the digits after it («صحيح٣/١٣٣», pdf.js), ﷺ spelled out in
+  reverse by pdf.js, and «إلَّا», «رجلًا» (mark order on alef), in both engines.
+- Typst bug: when a paragraph moves to the next page to avoid a stranded line, a footnote can stay behind on the
+  page before. With widow/orphan control off, notes always sit with their marker, but a single line can be left
+  at the top of a page. (Handled since: see below.)
+
+**You chose Typst.** Notes from building it:
+
+- **The hidden text layer** (`src/lib/pdf/textlayer.ts`). Each word in the Typst source is followed by an
+  invisible marker; Typst reports where every marker landed, and the PDF is rewritten
+  (`src/lib/pdf/pdffile.ts`): the printed glyphs read as spaces, Typst's `ActualText` goes, and each line is
+  written again in a font whose codes are Unicode code points. What the viewers needed, found by testing:
+  - pdf.js reverses a line letter by letter, so letters go in reversed order, marks before their letter.
+  - pdf.js treats an empty mapping as "no mapping" and shows the glyph codes as Latin letters; a space works.
+  - pdf.js breaks a line into pieces at a space glyph followed by a gap under 0.1 em, and adds its own space at
+    0.1–0.6 em, after any vowel mark that opens the next word. So the gap depends on the word's first glyph.
+  - pdf.js puts a mark that opens a line onto the line before; a NUL glyph opens each line (the viewer drops NULs
+    when copying and searching, PDFium skips them).
+  - PDFium moves a word's last vowel mark past the punctuation after it; an RLM between them stops that.
+  - Arabic-Indic numbers around «–» or «×» are in reverse order on screen; a small bidi step orders each word.
+
+  | words correct, and in order (`npm run pdfcheck`) | pdf.js | PDFium |
+  |---|---|---|
+  | 17100 (small book) | 99.8%, 98.6% | 99.8%, 98.9% |
+  | Siyar «بقية العشرة» (many notes) | 99.9%, 98.2% | 99.9%, 98.4% |
+  | رياض الصالحين 12014, pages 21–80 (fully vowelled) | 99.7%, 98.9% | 98.9%, 98.4% |
+  | البداية والنهاية 8376, pages 1–120 | 99.9%, 96.9% | 99.9%, 97.2% |
+
+  Poppler (Okular, Evince) reads the vowelled book at 95.8% (12.6% before). The pages look exactly as Typst made
+  them (pixel for pixel). The tagged-PDF structure goes, as it pointed at the printed glyphs.
+- **Notes on the right page.** A note in a heading is placed under the heading (the heading shows its number).
+  After layout, Typst reports any note that is not on its marker's page; when the block holding the marker
+  starts on the marker's page anyway, a page break goes before it and Typst lays out once more. Siyar vol. 12:
+  139 of 1,356 notes landed a page early; with the heading change 26, after the second layout 2. What is left is a
+  paragraph that started on the page before (Siyar chapter: 2 of 223).
+- **Speed and memory.** The markers make Typst about 1.5× slower and use twice the memory (2 GB in Node for
+  Siyar vol. 12). In the site, Siyar vol. 12 (739 book pages, 940 A5 pages) takes 30 s in Chrome on this laptop,
+  from the click to the file: book download 1.6 s, reading 1.5 s, two layouts and the text layer 27 s. A phone
+  will take a few times longer. Typst has a worker of its own, which the page ends after each PDF to give the
+  memory back; hence also the 1,000-page limit per PDF. (In Node, Typst runs 2–3× slower next to a parsed book,
+  even in another thread, so `npm run pdfcheck` times are not the site's; Chrome shows no such effect.)
+- **File size.** Dictionaries go into compressed object streams, and the streams are compressed harder: 208 pages
+  of البداية والنهاية are 1.9 MB (was 2.9 MB), Siyar vol. 12 7.6 MB with its cover (Typst alone: 10 MB). The hidden
+  text is about a third of a file.
+- **The book page.** «تحميل EPUB» and «تحميل PDF» side by side, the page size (A5 or ١٧×٢٤ سم) under them,
+  remembered in the browser; every volume has its own EPUB and PDF buttons. The first PDF notes that the engine is
+  fetched once. Made in the browser: a small book in a few seconds; volume 3 of البداية والنهاية (416 book pages)
+  in 38 s, with the 22 MB book download.
+- `npm run pdfcheck` builds the test books into `.cache/pdf/` and scores them (`-- 22669 --vol 12`,
+  `--size 17x24`, `--pages 1007-1101`). `npm test` builds excerpts of three books (`tests/fixtures/`).
+
 ## Later (only if wanted)
 - Search inside book text
-- PDF with selectable Arabic text
 - English and Turkish interface
 - "Remove harakat" option
 
@@ -243,3 +395,5 @@ The earlier detailed plan is in [old/PLAN-full.md](old/PLAN-full.md).
 - Kindle and Arabic: [KDP Arabic help](https://kdp.amazon.com/en_US/help/topic/GUQT4C8J6RR6V8TY), [Kindle Arabic fonts (forum)](https://www.mobileread.com/forums/showthread.php?p=3064809)
 - EPUB in the browser: [Jim Nielsen](https://blog.jim-nielsen.com/2022/generating-epub-file-in-browser/), [epub-gen-memory](https://github.com/cpiber/epub-gen-memory)
 - Fonts: [Noto Naskh Arabic](https://fontsource.org/fonts/noto-naskh-arabic/about), [Amiri](https://fonts.google.com/specimen/Amiri/about)
+- PDF: [typst.ts (Typst in the browser)](https://github.com/myriad-dreamin/typst.ts), [Typst: Arabic justification (open issue)](https://github.com/typst/typst/issues/195),
+  [Chrome print margin boxes](https://developer.chrome.com/blog/print-margins), [Paged.js supported features](https://pagedjs.org/en/documentation/14-supported-feature-of-the-w3c-specifications/)

@@ -4,7 +4,7 @@
 
 **المكتبة الشاملة، نسخةً في يدك**
 
-Any Shamela book as a beautiful EPUB for your phone, tablet or e-reader.<br>
+Any Shamela book as a beautiful EPUB for your phone, tablet or e-reader, or as a PDF like a printed book.<br>
 Free. No sign-up. No app to install.
 
 ### [**→ Open Nuskha**](https://m4lcolmy.github.io/Nuskha/)
@@ -61,6 +61,20 @@ The EPUB is made to look like a printed book, not a web page.
 
 ---
 
+## Or a PDF, like a printed book
+
+Fixed pages, the same for everyone: to print, to cite, or to read page by page.
+
+- **Two sizes:** A5 for reading on a screen, and 17×24 cm, the usual size of Arabic scholarly books, for printing
+  (mirrored margins, chapters on a new page).
+- **Footnotes at the foot of the page**, numbered from ١ on each page, as in printed Arabic books.
+- **Running heads** with the book's title and the chapter, and the printed pages this page covers («ص ١٣٥–١٣٦»).
+- **Cover, title page, book card**, and **«الفهرس»** at the end with real page numbers, plus bookmarks.
+- **Text that copies right**, vowel marks and all, in Chrome, Edge and Firefox.
+- Made in your browser by Typst. Its engine (11 MB) comes with the first PDF and then stays in your browser.
+
+---
+
 ## Find any book in seconds
 
 Type the way you normally type. Nuskha knows that أ and ا, ة and ه, ى and ي are the same letter, and it
@@ -104,7 +118,7 @@ Works on any phone, tablet or computer, in light or night mode («قاعة ال�
 ## Private and free
 
 - **No account, no ads, no tracking.**
-- **Nothing is uploaded.** Your browser fetches the book and builds the EPUB itself. There is no Nuskha server.
+- **Nothing is uploaded.** Your browser fetches the book and builds the EPUB or PDF itself. There is no Nuskha server.
 - **Always up to date.** The book list is refreshed every week.
 - **Open source** (MIT).
 
@@ -148,6 +162,7 @@ Then open the link it prints.
 | `npm run volumes` | Rebuild the volume lists |
 | `npm run fonts` | Rebuild the fonts (needs Python, fontTools, brotli) |
 | `npm run epubcheck` | Build 4 test books and check them |
+| `npm run pdfcheck` | Build test books as PDFs and score the text pdf.js and PDFium read back |
 | `npm run size` | Show the size of the built site |
 
 ### Deploy
@@ -159,6 +174,7 @@ Every Friday the book list and volume lists are refreshed from turath.
 
 - `src/` – the website (Svelte)
 - `src/lib/epub/` – the EPUB builder
+- `src/lib/pdf/` – the PDF builder: Typst source, page design, hidden text layer
 - `src/lib/search/` – Arabic search
 - `scripts/` – data and font scripts
 - `.github/workflows/` – deploy and weekly refresh

@@ -1,10 +1,16 @@
-// Messages between the book page and the EPUB worker.
+// Messages between the book page and the book worker (which makes the EPUB, and writes the PDF's
+// Typst document for the PDF worker).
 
+import type { TypstDoc } from '../pdf/build.ts';
+import type { PageSize } from '../pdf/template.ts';
 import type { Volume } from '../turath/volumes.ts';
 import type { EpubMeta } from './build.ts';
 
 /** The whole book, or one volume. `list` only reads the book, to show its volumes when no list is stored. */
 export type Choice = { kind: 'whole' } | { kind: 'volume'; name: string } | { kind: 'list' };
+
+/** EPUB, or PDF in one of the two page sizes. */
+export type Format = { kind: 'epub' } | { kind: 'pdf'; size: PageSize };
 
 export type Stage = 'download' | 'process' | 'build';
 
@@ -19,6 +25,7 @@ export type ToWorker =
       fontUrl: string;
       meta: EpubMeta;
       choice: Choice;
+      format: Format;
       /** File name without extension: «سير أعلام النبلاء - ط الحديث». */
       fileBase: string;
     }
@@ -30,6 +37,8 @@ export type FromWorker =
   /** The worker asks the page to draw a cover (canvas and the site's fonts live there). */
   | { type: 'cover'; key: number; volNote: string }
   | { type: 'done'; job: number; name: string; bytes: Uint8Array; mime: string }
+  /** The PDF's Typst document, for the PDF worker; the page draws the cover for it. */
+  | { type: 'doc'; job: number; name: string; doc: TypstDoc; volNote: string }
   /** The book is read and its volumes sent (a `list` choice). */
   | { type: 'listed'; job: number }
   | { type: 'error'; job: number; message: string; network: boolean };

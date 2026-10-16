@@ -3,10 +3,13 @@
   // a list of them under it, grouped by the book's own parts when it has them («كتاب سيرة رسول الله ﷺ»
   // ج٣–ج٩), each with its own button. A list on the page, not a <select>: the system draws a select's
   // menu (on Linux it covers the page and cuts long names), and it can't show a second line.
+  // Each download comes as EPUB or PDF, side by side; the PDF's page size is chosen under them.
   // Progress shows next to the button pressed, and the file saves by itself.
   import type { Book } from '../lib/catalog/types.ts';
-  import { cancel, download, isKept, save, start } from '../lib/download.svelte.ts';
-  import { WHOLE_MAX_BYTES, type Choice } from '../lib/epub/protocol.ts';
+  import { cancel, download, isEngineKept, isKept, save, start } from '../lib/download.svelte.ts';
+  import { WHOLE_MAX_BYTES, type Choice, type Format } from '../lib/epub/protocol.ts';
+  import { PDF_MAX_PAGES } from '../lib/pdf/protocol.ts';
+  import type { PageSize } from '../lib/pdf/template.ts';
   import { NOUNS, count, size } from '../lib/format.ts';
   import { storedVolumes } from '../lib/turath/volume-index.ts';
   import { volLong, volShort, type Volume } from '../lib/turath/volumes.ts';
@@ -19,6 +22,28 @@
   let active: Choice = $state.raw({ kind: 'whole' });
   let open = $state(false);
   let opened = false; // the list has been opened once by itself
+  /** The format last started here. */
+  let activeFormat: Format['kind'] = $state('epub');
+  let engineKept = $state(false);
+  isEngineKept().then((k) => (engineKept ||= k));
+
+  // The PDF page size, remembered in this browser.
+  const SIZE_KEY = 'nuskha.pdfSize';
+  let pdfSize: PageSize = $state(readSize());
+  function readSize(): PageSize {
+    try {
+      return localStorage.getItem(SIZE_KEY) === '17x24' ? '17x24' : 'a5';
+    } catch {
+      return 'a5';
+    }
+  }
+  $effect(() => {
+    try {
+      localStorage.setItem(SIZE_KEY, pdfSize);
+    } catch {
+      // No storage: the choice lasts as long as the page.
+    }
+  });
 
   $effect(() => {
     const id = book.id;
@@ -74,9 +99,10 @@
   /** What the main button downloads: «الكتاب كاملًا», or «الكتاب» for a one-volume book. */
   const what = $derived(multi || (mayHaveVolumes && !volumes) ? 'الكتاب كاملًا' : 'الكتاب');
 
-  function go(choice: Choice) {
+  function go(choice: Choice, format: Format['kind'] = activeFormat) {
     active = choice;
-    start(book, choice);
+    activeFormat = format;
+    start(book, choice, format === 'pdf' ? { kind: 'pdf', size: pdfSize } : { kind: 'epub' });
   }
 
   /** Whether the progress or result of `choice` belongs here: the last one started on this book. */
@@ -84,6 +110,14 @@
     mine &&
     (active.kind === choice.kind || (active.kind === 'list' && choice.kind === 'whole')) &&
     (choice.kind !== 'volume' || (active.kind === 'volume' && active.name === choice.name));
+
+  /** A PDF is made in the browser; past this many pages a phone runs out of memory. */
+  const pdfWhole = $derived(book.pages <= PDF_MAX_PAGES);
+  const pdfVolume = (v: Volume) => v.count <= PDF_MAX_PAGES;
+  // Once a PDF is made, the engine is kept.
+  $effect(() => {
+    if (mine && download.stage === 'done' && download.format?.kind === 'pdf') engineKept = true;
+  });
 
   const STAGES = [
     ['download', 'تنزيل'],
@@ -101,6 +135,7 @@
           <li class:active={i === stageIndex} class:done={i < stageIndex}>{name}</li>
         {/each}
       </ol>
+      {#if download.engine}<p class="hint">تنزيل محرّك PDF، مرة واحدة ثم يبقى في متصفحك.</p>{/if}
       <div class="bar" aria-hidden="true"><div style:width="{Math.round(download.fraction * 100)}%"></div></div>
       <button class="link" onclick={cancel}>إلغاء</button>
     </div>
@@ -119,15 +154,38 @@
   {/if}
 {/snippet}
 
+{#snippet sizes()}
+  <fieldset class="sizes">
+    <legend>حجم صفحة PDF</legend>
+    <label><input type="radio" bind:group={pdfSize} value="a5" /> <span>A5</span> <span class="for">للقراءة على الشاشة</span></label>
+<!-- LRMs: Arabic-Indic digits around «×» would show as «٢٤×١٧» even left to right. -->
+    <label><input type="radio" bind:group={pdfSize} value="17x24" /> <span><bdi dir="ltr">١٧&lrm;×&lrm;٢٤</bdi> سم</span> <span class="for">للطباعة</span></label>
+  </fieldset>
+  {#if !engineKept}<p class="hint small">أول ملف PDF يُنزَّل معه محرّك الإنشاء (١١ م.ب) مرة واحدة.</p>{/if}
+{/snippet}
+
 <div class="download">
   {#if !(multi && tooBig)}
-    <button class="primary" disabled={busy} onclick={() => go({ kind: 'whole' })}>
-      <span class="label">تحميل {what}</span>{#if !kept}<span class="size">{size(book.size)}</span>{/if}
-    </button>
+    {#if what === 'الكتاب كاملًا'}<p class="what">الكتاب كاملًا</p>{/if}
+    <div class="formats">
+      <button class="primary" disabled={busy} onclick={() => go({ kind: 'whole' }, 'epub')}>
+        <span class="label">تحميل EPUB</span>{#if !kept}<span class="size">{size(book.size)}</span>{/if}
+      </button>
+      <button
+        class="primary pdf"
+        disabled={busy || !pdfWhole}
+        title={pdfWhole ? undefined : 'الكتاب أكبر من أن يُنشأ PDF منه في المتصفح؛ اختر جزءًا'}
+        onclick={() => go({ kind: 'whole' }, 'pdf')}
+      >
+        <span class="label">تحميل PDF</span>
+      </button>
+    </div>
+    {@render sizes()}
     {#if !(at({ kind: 'whole' }) && (busy || download.stage === 'error'))}
-      <!-- Never end on «EPUB»: a full stop after Latin shows on the wrong side. -->
+      <!-- Never end on a Latin word: a full stop after it shows on the wrong side. -->
       <p class="hint">
-        {kept ? 'بصيغة EPUB، والكتاب محفوظ في متصفحك فيُنشأ الملف فورًا.' : 'بصيغة EPUB، ويُحفظ الكتاب في متصفحك لما بعدُ.'}
+        {kept ? 'الكتاب محفوظ في متصفحك، فيُنشأ الملف فورًا.' : 'يُحفظ الكتاب في متصفحك لما بعدُ.'}
+        {#if !pdfWhole}{multi || mayHaveVolumes ? 'ويُنشأ PDF لكل جزء على حدة.' : 'والكتاب أكبر من أن يُنشأ منه PDF في المتصفح.'}{/if}
       </p>
     {/if}
     {@render status({ kind: 'whole' })}
@@ -163,9 +221,20 @@
                     </span>
                     {#if v.begins}<span class="begins">وفيه يبدأ: {v.begins}</span>{/if}
                   </div>
-                  <button class="get" disabled={busy} onclick={() => go(choice)} aria-label="تحميل {volLong(v.name)}">
-                    تحميل
-                  </button>
+                  <div class="gets">
+                    <button class="get" disabled={busy} onclick={() => go(choice, 'epub')} aria-label="تحميل {volLong(v.name)} بصيغة EPUB">
+                      EPUB
+                    </button>
+                    <button
+                      class="get"
+                      disabled={busy || !pdfVolume(v)}
+                      title={pdfVolume(v) ? undefined : 'الجزء أكبر من أن يُنشأ PDF منه في المتصفح'}
+                      onclick={() => go(choice, 'pdf')}
+                      aria-label="تحميل {volLong(v.name)} بصيغة PDF"
+                    >
+                      PDF
+                    </button>
+                  </div>
                 </div>
                 {@render status(choice)}
               </li>
@@ -200,6 +269,64 @@
     font-size: 1.15rem;
     cursor: pointer;
     min-width: 220px;
+  }
+  .what {
+    margin: 0 0 8px;
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+  }
+  .formats {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .formats .primary {
+    min-width: 180px;
+  }
+  .primary.pdf {
+    background: none;
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .primary.pdf:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--accent-ink);
+    filter: none;
+  }
+  .sizes {
+    border: 0;
+    margin: 12px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 18px;
+    font-size: 0.9rem;
+  }
+  .sizes legend {
+    float: right;
+    color: var(--ink-soft);
+    margin-inline-end: 4px;
+  }
+  .sizes label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    cursor: pointer;
+  }
+  .sizes input {
+    accent-color: var(--accent);
+    margin: 0;
+    align-self: center;
+  }
+  .sizes .for {
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+  }
+  .hint.small {
+    font-size: 0.8rem;
+    margin-top: 4px;
   }
   .primary:hover:not(:disabled) {
     filter: brightness(1.1);
@@ -390,8 +517,14 @@
     font-size: 0.8rem;
     color: var(--ink-soft);
   }
+  .gets {
+    flex: none;
+    display: flex;
+    gap: 6px;
+  }
   .get {
     flex: none;
+    font-family: inherit;
     background: none;
     border: 1px solid var(--accent);
     color: var(--accent);
@@ -416,8 +549,13 @@
     text-align: center;
   }
   @media (max-width: 480px) {
-    .primary {
+    .formats {
       width: 100%;
+    }
+    .formats .primary {
+      flex: 1;
+      min-width: 0;
+      padding-inline: 12px;
     }
   }
 </style>

@@ -6,11 +6,15 @@
 import type { EpubMeta } from './build.ts';
 
 const W = 1600;
-const H = 2560;
+/** The EPUB cover's height; a PDF cover takes the page's proportions and the layout scales with it. */
+const H_EPUB = 2560;
 const GOLD = '#c9a46b';
 const CREAM = '#f3ead8';
 
-export async function drawCover(meta: EpubMeta, volNote: string, binding: string): Promise<Uint8Array | undefined> {
+export async function drawCover(meta: EpubMeta, volNote: string, binding: string, aspect = H_EPUB / W): Promise<Uint8Array | undefined> {
+  const H = Math.round(W * aspect);
+  /** A height on the EPUB cover, on this one. */
+  const Y = (y: number) => (y * H) / H_EPUB;
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -48,7 +52,7 @@ export async function drawCover(meta: EpubMeta, volNote: string, binding: string
   // Ornament
   ctx.fillStyle = GOLD;
   ctx.font = font(110);
-  ctx.fillText('۞', W / 2, 470);
+  ctx.fillText('۞', W / 2, Y(470));
 
   // Title: as large as fits in at most four lines
   let size = 170;
@@ -58,7 +62,7 @@ export async function drawCover(meta: EpubMeta, volNote: string, binding: string
     lines = wrap(ctx, meta.mainTitle, font(size), 1180);
   }
   const lh = size * 1.55;
-  let y = 1000 - ((lines.length - 1) * lh) / 2;
+  let y = Y(1000) - ((lines.length - 1) * lh) / 2;
   ctx.fillStyle = CREAM;
   ctx.font = font(size);
   for (const l of lines) {
@@ -86,13 +90,13 @@ export async function drawCover(meta: EpubMeta, volNote: string, binding: string
   ctx.strokeStyle = GOLD;
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(W / 2 - 110, Math.max(y + 40, 1620));
-  ctx.lineTo(W / 2 + 110, Math.max(y + 40, 1620));
+  ctx.moveTo(W / 2 - 110, Math.max(y + 40, Y(1620)));
+  ctx.lineTo(W / 2 + 110, Math.max(y + 40, Y(1620)));
   ctx.stroke();
   if (meta.author) {
     ctx.fillStyle = CREAM;
     const author = wrap(ctx, meta.author, font(76), 1150).slice(0, 3);
-    let ay = Math.max(y + 170, 1760);
+    let ay = Math.max(y + 170, Y(1760));
     for (const l of author) {
       ctx.fillText(l, W / 2, ay);
       ay += 120;
