@@ -24,20 +24,23 @@ export const CSS = `@charset "utf-8";
   src: url(../fonts/Amiri-Regular.ttf);
 }
 
+/* Vowelled Arabic needs tall lines: Amiri's own line is 1.76 em, and at a reader's usual 1.3 the
+   marks of one line run into the next. The line height is set on p as well, since many reading
+   apps put their own on body. */
 body {
   font-family: "Amiri", "Traditional Arabic", "Geeza Pro", serif;
-  line-height: 1.9;
+  line-height: 2;
   text-align: justify;
   margin: 0 4%;
   widows: 2;
   orphans: 2;
 }
-p { margin: 0 0 0.45em 0; text-indent: 0; }
+p { margin: 0 0 0.45em 0; text-indent: 0; line-height: 2; }
 
 /* Headings: top level opens a chapter, centred, with a short rule and ۞ under it. */
 h1, h2, h3, h4, h5, h6 {
   font-weight: normal;
-  line-height: 1.6;
+  line-height: 1.8;
   page-break-after: avoid;
   break-after: avoid;
   text-align: right;
@@ -87,8 +90,8 @@ sup.nr { font-size: 0.72em; line-height: 0; }
   margin: 0 0 0.3em 0;
   border-top: 1px solid;
 }
-.fn { font-size: 0.84em; line-height: 1.75; margin: 0 0 0.3em 0; }
-.fn p { margin: 0; }
+.fn { font-size: 0.84em; line-height: 2; margin: 0 0 0.3em 0; }
+.fn p { margin: 0; line-height: 2; }
 .fn a.back { text-decoration: none; color: inherit; }
 hr.rule { width: 20%; margin: 1em auto; border: 0; border-top: 1px solid; }
 
@@ -105,15 +108,15 @@ hr.rule { width: 20%; margin: 1em auto; border: 0; border-top: 1px solid; }
 .imprint p { margin: 0; text-align: center; }
 
 /* Book card: small, like the back of a title page */
-.card { font-size: 0.85em; line-height: 1.8; margin-top: 10%; }
+.card { font-size: 0.85em; line-height: 2; margin-top: 10%; }
 .card h1 { font-size: 1.3em; text-align: center; margin: 0 0 1em 0; }
-.card p { text-align: right; margin: 0 0 0.2em 0; }
+.card p { text-align: right; margin: 0 0 0.2em 0; line-height: 2; }
 .card .source { margin-top: 1.6em; }
 
 /* Contents */
 .fihris h1 { font-size: 1.6em; text-align: center; margin: 1em 0 0.8em 0; }
 .fihris h2 { font-size: 1.2em; margin: 1.2em 0 0.4em 0; }
-.fihris p { text-align: right; margin: 0 0 0.25em 0; line-height: 1.6; }
+.fihris p { text-align: right; margin: 0 0 0.25em 0; line-height: 1.9; }
 .fihris a { text-decoration: none; color: inherit; }
 .fihris .l2 { margin-right: 1.2em; }
 .fihris .l3 { margin-right: 2.4em; font-size: 0.95em; }
