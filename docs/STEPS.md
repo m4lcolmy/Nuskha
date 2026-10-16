@@ -127,7 +127,7 @@ Test with the longest real titles and on Android, iPhone, Windows and Mac.
 
 Each step ends with something you check. I stop after each step and wait for your OK.
 
-### [ ] 1. Catalog and search
+### [x] 1. Catalog and search
 - A script builds the search file from turath's catalog (all fields above).
 - Search with the Arabic cleanup and ranking above, plus the 30 test searches.
 - **You check:** try your own searches on a plain test page.
