@@ -78,11 +78,69 @@ A list of **30 real searches with the expected first result**, run automatically
 - **Amiri** font built in as the default. Readers can still switch to their own font.
   (Kindle may ignore built-in Arabic fonts and use its own; that's fine.)
 
-### Big books
+### The look of the book (inside the EPUB)
+The pages should look like a well-printed Arabic book, not a web page.
+
+- **Cover:** like a cloth binding. The colour of the book's bookcase (the same binding colours as the site), a thin
+  gold-brown frame, the title and author in Amiri, a small «نسخة» at the foot. Made as a real image, because Kindle
+  and Apple Books need an image cover.
+- **Opening pages, in the order of a printed book:**
+  1. **Title page:** centred title, ornament, «تأليف» and the author's full name with death year, «تحقيق», then the
+     publisher and edition at the foot of the page.
+  2. **Book card** («بطاقة الكتاب»): the bibliographic card from Shamela and the source note, set small, like the
+     back of a title page.
+  3. **«الفهرس»**: the table of contents, with the volume and printed page next to each heading.
+- **Chapters:** each top-level heading starts on a new page, centred, with a short gold-brown rule and ۞ under it.
+  Lower headings are smaller and right-aligned, with space above them.
+- **Body text:** Amiri, justified, line height about 1.9, generous margins; space between paragraphs.
+- **Quran:** verses in ﴿ ﴾ set in a deep green; **hadith and poetry** are left as Shamela gives them.
+- **Footnotes:** smaller text under a short rule, numbered with Arabic-Indic digits, each with a ↩ back link.
+- **Printed page numbers:** a small, quiet «ج٣ ص١٢٤» in grey at each page change, never in the way of reading.
+- **Colours like a real book:** near-black ink, deep red (like rubrication in old books) for headings, gold-brown for
+  rules and ornaments, deep green for Quran. The **page background is left to the reader app**, so its paper,
+  sepia and night modes all keep working; in night mode the accent colours switch to lighter versions so they stay
+  readable. On e-ink (Kindle, Kobo) the colours become clean greys.
+- **Check:** screenshots of the same pages in Apple Books (white, sepia, night), Thorium, KOReader and Kindle Previewer.
+
+### Volumes: one volume, a few, or the whole book
+Every book with more than one volume offers **both**: each volume on its own, and the whole book in one EPUB.
+Nobody has to take all 14 volumes of البداية والنهاية to read the year they need.
+
+- **What turath gives us:** one file per book, never per volume (البداية والنهاية 6 MB to download, Siyar ط الحديث 7 MB,
+  Siyar ط الرسالة 11 MB). So any choice downloads the book file once. It is then **kept in the browser**, so a second
+  volume, or the whole book later, is made instantly and works offline.
+- **The volume list, before downloading:** each volume with a label taken from its first headings, so you can see what is
+  inside without opening it. Real examples:
+  - البداية والنهاية: ج٣ «باب كيف بدأ الوحي…» · ج٤ «سنة ثلاث من الهجرة…» · ج١٢ «سنة ست وأربعمائة…»
+  - Siyar ط الرسالة: «المقدمة» · «سيرة ١» · «سيرة ٢» · «راشدون» · ج١ «الطبقة الأولى» …
+
+  These labels come from turath's index, which our weekly catalog job reads (index only, never the book text), and are
+  stored in small files loaded only when a book page opens. If a book has no stored list yet, the list appears right
+  after the download instead.
+- **Choices on the book page:**
+  - **الكتاب كاملًا**: one EPUB, each volume a top-level section of the table of contents.
+  - **one volume**: tap it in the list.
+  - **a range** (e.g. ج٣–ج٥) in one EPUB, for a period or a section that spans volumes.
+  - **all volumes, one file each**: saved as one .zip, since browsers block many downloads at once.
+- **A Shamela page link picks the volume:** pasting `shamela.ws/book/8376/1672` opens the book with the volume that
+  contains that page already chosen.
+- **The biggest book** (124,569 pages) is offered per volume and by range only; one file that size would not open in readers.
 - Everything runs in a background worker, so the page never freezes. A progress bar shows: تنزيل ← معالجة ← إنشاء.
-- Books over about 1,500 printed pages (e.g. Siyar, 18 volumes) also offer **one EPUB per volume**.
-  The biggest book (124,569 pages) is offered **per volume only**.
 - The zip is made with **fflate** (small and fast), with `mimetype` first and uncompressed, as the EPUB rules require.
+- turath's hidden keys are **not fixed**: the same field has a different key in different books (checked on 8376,
+  22669, 10906, 17100), so the reader finds each field by its shape, not by its key.
+
+### Steps we skip
+Things a user would otherwise have to do, which Nuskha does for them:
+- **No settings screen before downloading.** Good defaults (keep harakat, Amiri, pop-up footnotes). Options can come later.
+- **No format choice.** EPUB only, so one button.
+- **No volume question for one-volume books.** One button, done.
+- **No "this is a big file, continue?" dialog.** The size is on the button instead: «تحميل EPUB · ٦ م.ب».
+- **No separate download screen.** The progress bar is on the book page, and the file saves by itself when ready.
+- **No second download.** Another volume of a book already fetched is made from the copy in the browser.
+- **A pasted link or book number goes straight to the book page**, not to a list with one result in it.
+- **Index volumes and editor's introductions** are marked in the volume list («فهارس», «مقدمة التحقيق»), so it is
+  clear what can be left out. They stay in «الكتاب كاملًا», which is what the printed book has.
 
 ### Test before calling it done
 - **epubcheck** (the official EPUB checker) must pass with **0 errors** on 4 test books: a small one, one with many footnotes,
@@ -132,12 +190,16 @@ Each step ends with something you check. I stop after each step and wait for you
 - Search with the Arabic cleanup and ranking above, plus the 30 test searches.
 - **You check:** try your own searches on a plain test page.
 
-### [ ] 2. Design: home, results, book page
+### [x] 2. Design: home, results, book page
 - The library design above, in Arabic, with day and night modes.
 - **You check:** open it on your phone and computer and search for a few books.
 
 ### [ ] 3. Full-quality EPUB
 - Book download, text cleanup and the EPUB builder, in the background with a progress bar. epubcheck on the 4 test books.
+- Volumes: the volume list with labels; one volume, a range, the whole book, or all volumes as a .zip;
+  the book file kept in the browser.
+- The look of the book: cloth-binding cover, title page, book card, «الفهرس», chapter openings, book colours
+  that work in the reader's white, sepia and night modes.
 - **You check:** download 3–4 books and open them in your readers.
 
 ### [ ] 4. Put it online

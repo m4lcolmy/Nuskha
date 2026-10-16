@@ -1,0 +1,140 @@
+/* Nuskha — a quiet library reading room. Paper, ink, old bindings, card catalogs. */
+
+@font-face {
+  font-family: 'Amiri';
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/amiri-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Naskh Arabic';
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/noto-naskh-arabic-400.woff2') format('woff2');
+}
+
+:root {
+  --paper: #f6f1e7;
+  --paper-deep: #efe7d8; /* hover, pressed */
+  --ink: #2b2118;
+  --ink-soft: #5e4f40; /* secondary text, 7:1 on paper */
+  --accent: #2f4a3a; /* library green */
+  --accent-ink: #f6f1e7; /* text on accent */
+  --rule: #b08d57; /* thin gold-brown rules (decoration only, never text) */
+  --rule-soft: #b08d5766;
+  --focus: #2f4a3a;
+
+  /* Binding colours of the bookcases */
+  --bind-aqida: #7a2e2a;
+  --bind-quran: #2f5d4a;
+  --bind-hadith: #2b3f63;
+  --bind-usul: #5a3a5e;
+  --bind-fiqh: #8a5a1f;
+  --bind-raqaiq: #5b6332;
+  --bind-tarikh: #8c4a2f;
+  --bind-lugha: #3f5666;
+  --bind-amma: #6b5e50;
+
+  --serif: 'Amiri', 'Noto Naskh Arabic', serif;
+  --text: 'Noto Naskh Arabic', 'Amiri', 'Geeza Pro', 'Segoe UI', sans-serif;
+
+  color-scheme: light;
+}
+
+/* «قاعة المطالعة ليلًا» — walnut and cream. Follows the system unless the reader picks. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #1c1714;
+    --paper-deep: #26201b;
+    --ink: #ece3d2;
+    --ink-soft: #bcae98;
+    --accent: #8fb79e;
+    --accent-ink: #1c1714;
+    --rule: #9b7b4c;
+    --rule-soft: #9b7b4c55;
+    --focus: #8fb79e;
+    --bind-aqida: #c47a72;
+    --bind-quran: #7fb59a;
+    --bind-hadith: #8aa3cc;
+    --bind-usul: #b593b8;
+    --bind-fiqh: #d1a05e;
+    --bind-raqaiq: #a9b273;
+    --bind-tarikh: #d08c6c;
+    --bind-lugha: #8fa9ba;
+    --bind-amma: #b3a593;
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  --paper: #1c1714;
+  --paper-deep: #26201b;
+  --ink: #ece3d2;
+  --ink-soft: #bcae98;
+  --accent: #8fb79e;
+  --accent-ink: #1c1714;
+  --rule: #9b7b4c;
+  --rule-soft: #9b7b4c55;
+  --focus: #8fb79e;
+  --bind-aqida: #c47a72;
+  --bind-quran: #7fb59a;
+  --bind-hadith: #8aa3cc;
+  --bind-usul: #b593b8;
+  --bind-fiqh: #d1a05e;
+  --bind-raqaiq: #a9b273;
+  --bind-tarikh: #d08c6c;
+  --bind-lugha: #8fa9ba;
+  --bind-amma: #b3a593;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 18px/1.8 var(--text);
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none; /* one weight only (budget); no faux bold */
+}
+
+a {
+  color: inherit;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 0.3em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root {
+    scroll-behavior: smooth;
+  }
+}

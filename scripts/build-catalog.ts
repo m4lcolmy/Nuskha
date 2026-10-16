@@ -94,6 +94,13 @@ function editionName(text: string): string {
   return /^(بدون.*|.*(السنة|العدد).*)?$/.test(name) ? '' : cap(name, 30);
 }
 
+/** Size in KB to two significant figures (25,483 → 25,000): enough to show, and compresses better. */
+function roughKB(bytes: number): number {
+  const kb = Math.max(1, Math.round(bytes / 1024));
+  const unit = 10 ** Math.max(0, Math.floor(Math.log10(kb)) - 1);
+  return Math.round(kb / unit) * unit;
+}
+
 function years(text: string): { hijri: number; greg: number } {
   const t = toAsciiDigits(text);
   const h = t.match(/(\d{3,4})\s*هـ/);
@@ -139,7 +146,7 @@ for (const b of books) {
   B.authorId.push(b.author_id);
   B.catId.push(b.cat_id);
   B.pages.push(b.page_count);
-  B.sizeKB.push(Math.max(1, Math.round(b.size / 1024)));
+  B.sizeKB.push(roughKB(b.size));
   B.flags.push((info.includes('موافق للمطبوع') ? FLAG_PRINTED : 0) | (b.has_pdf ? FLAG_PDF : 0));
   B.editor.push(cap(get(isEditorLabel).join('، '), 100));
   // «دار الحديث، القاهرة - مصر» → «دار الحديث»

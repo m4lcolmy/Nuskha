@@ -27,7 +27,7 @@ export interface BookColumns {
   authorId: number[];
   catId: number[];
   pages: number[];
-  /** Size of turath's book JSON, in KB. */
+  /** Size of turath's book JSON, in KB, to two significant figures. */
   sizeKB: number[];
   flags: number[];
   editor: string[];
