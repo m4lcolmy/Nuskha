@@ -16,6 +16,7 @@ import { decodeEntities, renderPage, type Note, type PageOut } from '../epub/pag
 import type { TurathBook } from '../turath/book.ts';
 import { spellHonorifics } from '../turath/honorifics.ts';
 import { volLong, volShort, type Volume } from '../turath/volumes.ts';
+import type { NoteAt } from './parts.ts';
 import { headingSize, SIZE, str, template, type PageSize } from './template.ts';
 
 export interface PdfInput {
@@ -42,22 +43,21 @@ export interface Word {
 }
 
 export interface TypstDoc {
-  /** The preamble and opening pages, the text one block per entry, «الفهرس». See typstSource(). */
-  head: string;
+  /** The page design (template.ts), and the opening pages: cover, title page, book card. */
+  preamble: string;
+  front: string;
+  /** The text, one block (paragraph, heading…) per entry. */
   blocks: string[];
-  tail: string;
   /** Word n is the one whose marker has the value n. */
   words: Word[];
   /** Each labelled note («fn12»): the block its marker is in, and that block's first word. */
-  notes: Record<string, { block: number; word: number }>;
+  notes: Record<string, NoteAt>;
+  /** The headings, for «الفهرس»: label («h12»), level, title as plain text. */
+  headings: { label: string; level: number; title: string }[];
+  /** Blocks a part may start with: 0 a volume, 1 a chapter, 2 another heading (parts.ts). */
+  starts: { block: number; rank: number }[];
   /** Title for the file details, with the volume: «سير أعلام النبلاء - ط الحديث - ج٣». */
   docTitle: string;
-}
-
-/** The Typst source, with a page break before each of the blocks in `breaks`. */
-export function typstSource(doc: TypstDoc, breaks: Set<number> = new Set()): string {
-  const blocks = doc.blocks.map((b, i) => (breaks.has(i) ? `#pagebreak(weak: true)\n\n${b}` : b));
-  return [doc.head, blocks.join('\n\n'), doc.tail].join('\n');
 }
 
 /** A chapter (new page, no running head) needs at least this many book pages on average. */
@@ -100,7 +100,22 @@ export function buildTypst(input: PdfInput): TypstDoc {
   let held = ''; // notes of a heading, waiting for the paragraph under it
   let vol: string | undefined;
   const notesAt: TypstDoc['notes'] = {};
+  const headings: TypstDoc['headings'] = [];
+  const starts: TypstDoc['starts'] = [];
   let paraWord = 0; // first word of the open paragraph
+
+  /** A heading, labelled for «الفهرس»; its title is its words. */
+  const heading = (level: number, markup: () => string, rank: number, start: number) => {
+    const label = `h${headings.length + 1}`;
+    const from = w.words.length;
+    lines.push(`#heading(level: ${level})[${markup()}]<${label}>`);
+    const title = w.words
+      .slice(from)
+      .map((x, i) => (i && x.sp ? ' ' : '') + x.t)
+      .join('');
+    headings.push({ label, level, title });
+    starts.push({ block: start, rank });
+  };
 
   const endPara = () => {
     if (open === null) return;
@@ -117,7 +132,8 @@ export function buildTypst(input: PdfInput): TypstDoc {
       vol = p.vol;
       if (parts) {
         endPara();
-        lines.push(`#heading(level: 1)[${w.text(volLong(vol), SIZE.volume)}]`);
+        const v = vol;
+        heading(1, () => w.text(volLong(v), SIZE.volume), 0, lines.length);
       }
     }
     const notes = new Map(out.notes.map((n) => [n.id, n]));
@@ -166,7 +182,8 @@ export function buildTypst(input: PdfInput): TypstDoc {
         // paragraph under it (Typst can leave a note in a heading behind when it moves the heading to
         // the next page to keep it with its paragraph).
         w.defer = [];
-        lines.push(`#heading(level: ${level})[${w.markup(blk.html, notes, headingSize(level, chapterLevel, volumeLevel))}]`);
+        const size = headingSize(level, chapterLevel, volumeLevel);
+        heading(level, () => w.markup(blk.html, notes, size), level === chapterLevel ? 1 : 2, start.block);
         held += w.defer.join('');
         w.defer = null;
         for (const id of w.deferred.splice(0)) notesAt[id] = start;
@@ -234,14 +251,7 @@ export function buildTypst(input: PdfInput): TypstDoc {
     `#card-page[${cardBody(w, book.info, meta, sourceNote, date)}]`,
   ].filter(Boolean);
 
-  return {
-    head: [head, ...front, '#counter(page).update(1)', ''].join('\n'),
-    blocks: lines,
-    tail: '\n#fihris()\n',
-    words: w.words,
-    notes: notesAt,
-    docTitle,
-  };
+  return { preamble: head, front: front.join('\n'), blocks: lines, words: w.words, notes: notesAt, headings, starts, docTitle };
 }
 
 // --- markup -------------------------------------------------------------------------------------

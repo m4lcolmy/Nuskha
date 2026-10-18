@@ -92,6 +92,9 @@ export function template(t: TemplateInput): string {
   keywords: (${t.keywords.map(str).join(', ')}${t.keywords.length === 1 ? ',' : ''}),
 )
 #set text(font: "Amiri", lang: "ar", dir: rtl, size: ${p.size}pt, ${EDGES}, fill: ink)
+// No widow and orphan control: when Typst moves a line to keep two lines together, it can leave the
+// line's notes on the page before (Typst 0.14). A note on the wrong page is worse than a single line.
+#set text(costs: (widow: 0%, orphan: 0%))
 #set par(justify: true, leading: 0pt, spacing: 0.45em, first-line-indent: 0pt)
 #set block(spacing: 0.45em)
 
@@ -169,7 +172,8 @@ export function template(t: TemplateInput): string {
     text(fill: grey, if range != "" { lit(range, ${SIZE.head}) }),
   )
   grid(
-    columns: (1fr, 4fr, 1fr),
+    // Room in the corners for a range of printed pages («ج١ ص ٣٨٠–٣٨١») on one line.
+    columns: (1.4fr, 3.2fr, 1.4fr),
     align: (start + bottom, center + bottom, end + bottom),
     ..(if even { cells } else { cells.rev() }),
   )
@@ -228,8 +232,6 @@ export function template(t: TemplateInput): string {
 
 #show heading: set text(weight: "regular", fill: red)
 #show heading: it => {
-  // The title of «الفهرس» is a heading too, but none of the book's.
-  if not it.outlined { return block(below: 1em, it.body) }
   if volume-level > 0 and it.level == volume-level {
     to-odd()
     v(28%)
@@ -296,21 +298,21 @@ export function template(t: TemplateInput): string {
 #let k(key) = text(fill: red, key)
 
 // --- «الفهرس», at the end, where Arabic books put it ----------------------------------------------
+// Laid out after the text, by itself (make.ts): the text may come in several parts, and the page
+// numbers are known only then. Each entry has a marker (<fx>), where make.ts puts its link.
 
-#let fihris() = {
-  pagebreak(weak: true)
+#let fihris-title() = {
   to-odd()
-  set page(header: none)
-  show outline.entry: it => {
-    show footnote: none
-    show super: none
-    let indent = (it.level - 1) * 1.2em
-    let size = if it.level <= 1 { 1 } else { 0.94 }
-    let n = numbering("١", ..counter(page).at(it.element.location()))
-    block(above: 0.3em, below: 0.3em, pad(right: indent, text(size: size * 1em, link(it.element.location(),
-      it.indented(none, it.body() + box(width: 1fr, inset: (x: 0.3em), repeat(text(fill: grey)[.], gap: 0.15em)) + text(fill: grey, lit(n, size)))))))
-  }
-  outline(title: align(center, text(size: 1.6em, fill: red, weight: "regular", lit("الفهرس", 1.6))), indent: 0pt, depth: 4)
+  align(center, block(below: 1em, text(size: 1.6em, fill: red, lit("الفهرس", 1.6))))
+}
+#let fx(i, level, title, n) = {
+  let size = if level <= 1 { 1 } else { 0.94 }
+  block(above: 0.3em, below: 0.3em, pad(right: (level - 1) * 1.2em, text(size: size * 1em, {
+    lit(title, size)
+    [#metadata(i)<fx>]
+    box(width: 1fr, inset: (x: 0.3em), repeat(text(fill: grey)[.], gap: 0.15em))
+    text(fill: grey, lit(n, size))
+  })))
 }
 `;
 }

@@ -16,22 +16,11 @@
 
 import { unzlibSync } from 'fflate';
 import type { Word } from './build.ts';
-import {
-  addObject,
-  collectGarbage,
-  getKey,
-  readPdf,
-  refsIn,
-  removeKey,
-  setKey,
-  streamObject,
-  writePdf,
-  type Pdf,
-} from './pdffile.ts';
+import { addObject, getKey, pageList, refsIn, removeKey, rootOf, setKey, streamObject, type Pdf } from './pdffile.ts';
 import type { Mark } from './typst.ts';
 
 export interface LayerInput {
-  pdf: Uint8Array;
+  /** Pages numbered in the whole file. */
   marks: Mark[];
   words: Word[];
   /** Body text size, pt. */
@@ -46,10 +35,9 @@ export interface LayerInput {
 
 const FONT = 'fN';
 
-export function addTextLayer(input: LayerInput): Uint8Array {
-  const pdf = readPdf(input.pdf);
-  const root = refsIn(getKey(pdf.trailer, 'Root') ?? '')[0];
-  const catalog = pdf.objects.get(root);
+/** Adds the hidden text layer to a PDF Typst made (read with readPdf or joinPdfs). */
+export function addTextLayer(pdf: Pdf, input: LayerInput): void {
+  const catalog = pdf.objects.get(rootOf(pdf));
   if (!catalog) throw new Error('no catalog');
   catalog.body = removeKey(removeKey(catalog.body, 'StructTreeRoot'), 'MarkInfo');
 
@@ -78,9 +66,9 @@ export function addTextLayer(input: LayerInput): Uint8Array {
   pages.forEach((pageNum, i) => {
     const page = pdf.objects.get(pageNum)!;
     page.body = removeKey(page.body, 'StructParents');
+    for (const ref of refsIn(getKey(page.body, 'Contents') ?? '')) tidyContent(pdf, ref);
     const marks = byPage.get(i + 1);
     if (!marks?.length) return;
-    for (const ref of refsIn(getKey(page.body, 'Contents') ?? '')) dropActualText(pdf, ref);
     const box = (getKey(page.body, 'MediaBox') ?? '').match(/[-\d.]+/g)?.map(Number) ?? [0, 0, 0, 0];
     const content = pageText(marks, input, box[3], seen);
     if (!content) return;
@@ -89,19 +77,25 @@ export function addTextLayer(input: LayerInput): Uint8Array {
     page.body = setKey(page.body, 'Contents', contents ? `[${contents.replace(/^\[|\]$/g, '')} ${ref} 0 R]` : `${ref} 0 R`);
     page.body = addFont(pdf, page.body, font);
   });
-
-  collectGarbage(pdf);
-  return writePdf(pdf);
 }
 
-/** Typst marks some glyphs with the text they stand for (ActualText); PDFium reads it. Not any more. */
-function dropActualText(pdf: Pdf, ref: number): void {
+/**
+ * Typst's page content, tidied: its marked content goes (the tags pointed into the structure tree,
+ * which is gone; and some carry ActualText, which PDFium would read instead of the hidden text), and
+ * numbers keep two decimals instead of eight (a hundredth of a point; four below 10).
+ */
+const short = (n: number) => String(Math.abs(n) >= 10 ? Math.round(n * 100) / 100 : Math.round(n * 10000) / 10000);
+
+function tidyContent(pdf: Pdf, ref: number): void {
   const o = pdf.objects.get(ref);
   if (!o?.stream) return;
   const compressed = /\/FlateDecode/.test(o.body);
   const text = latin1.decode(compressed ? unzlibSync(o.stream) : o.stream);
-  if (!text.includes('/ActualText')) return;
-  const out = text.replace(/\/ActualText\s*(?:<[0-9A-Fa-f\s]*>|\((?:\\.|[^\\)])*\))/g, '');
+  // Strings first, so nothing inside a string (glyph codes) is touched.
+  const out = text.replace(
+    /(\((?:\\.|[^\\()])*\)|<[0-9A-Fa-f]*>(?!>))|\/[A-Za-z]+\s*(?:<<(?:[^<>]|<[0-9A-Fa-f]*>|\((?:\\.|[^\\()])*\))*>>|\/[A-Za-z]+)\s*BDC\b|\/[A-Za-z]+\s+BMC\b|\bEMC\b|(-?\d+\.\d{3,})/g,
+    (m, str: string | undefined, num: string | undefined) => (str ? m : num ? short(Number(num)) : ''),
+  );
   pdf.objects.set(ref, streamObject(bytesOf(out), pdfDictExtra(o.body)));
 }
 
@@ -113,14 +107,6 @@ const bytesOf = (s: string) => {
 };
 /** A stream's dictionary entries other than its length and filter. */
 const pdfDictExtra = (body: string) => removeKey(removeKey(body, 'Length'), 'Filter').replace(/^<<|>>$/g, '');
-
-/** Page object numbers in order. */
-function pageList(pdf: Pdf, node: number): number[] {
-  const o = pdf.objects.get(node);
-  if (!o) return [];
-  if (/\/Type\s*\/Page\b/.test(o.body)) return [node];
-  return refsIn(getKey(o.body, 'Kids') ?? '').flatMap((k) => pageList(pdf, k));
-}
 
 function addFont(pdf: Pdf, page: string, font: number): string {
   const res = getKey(page, 'Resources');
@@ -187,13 +173,15 @@ function pageText(marks: Mark[], input: LayerInput, height: number, seen: Set<nu
     placed.push({ glyphs: visual(chars), x, y: height - y, width, size: fs, sp, seq: k });
   }
 
-  // Lines: words on one baseline, in the order the first word of each was read.
+  // Lines: words on one baseline, from the top of the page down (Typst lists a note's words just
+  // after its marker; a reader selects the notes after the text).
   const lines: Placed[][] = [];
   for (const p of placed) {
     const line = lines.find((l) => Math.abs(l[0].y - p.y) < Math.min(l[0].size, p.size) * 0.3);
     if (line) line.push(p);
     else lines.push([p]);
   }
+  lines.sort((a, b) => b[0].y - a[0].y);
   const ops: string[] = ['q', 'BT', '3 Tr'];
   lines.forEach((line) => {
     line.sort((a, b) => a.x - b.x);

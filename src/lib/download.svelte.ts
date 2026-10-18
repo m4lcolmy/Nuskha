@@ -2,14 +2,19 @@
 // progress, and saves the file when it's ready. One download at a time.
 //
 // EPUB: the book worker downloads and reads the book and makes the file.
-// PDF: the book worker writes a Typst document; the PDF worker (fetched once, then kept) lays it out.
+// PDF: the book worker writes a Typst document. Its parts (pdf/parts.ts) are laid out one by one,
+// each by a fresh PDF worker (the engine is fetched once, then kept), and a last one joins them.
 
 import type { Book } from './catalog/types.ts';
 import { drawCover } from './epub/cover.ts';
 import { epubMeta } from './epub/meta.ts';
 import { BOOK_CACHE, bookUrl, type Choice, type Format, type FromWorker, type Stage, type ToWorker } from './epub/protocol.ts';
+import { num } from './format.ts';
+import type { TypstDoc } from './pdf/build.ts';
+import type { PartResult } from './pdf/make.ts';
+import { partDoc, planParts } from './pdf/parts.ts';
 import { ENGINE_CACHE, ENGINE_FILE, type FromPdf, type ToPdf } from './pdf/protocol.ts';
-import { PAGE_SIZES } from './pdf/template.ts';
+import { PAGE_SIZES, type PageSize } from './pdf/template.ts';
 import { bindingHex } from './shelves.ts';
 import type { Volume } from './turath/volumes.ts';
 
@@ -19,6 +24,8 @@ class Download {
   format: Format | undefined = $state.raw();
   stage: Stage | 'done' | 'error' | undefined = $state();
   fraction = $state(0);
+  /** What the PDF engine is doing, for a big book: «الجزء ٢ من ٧». */
+  step = $state('');
   /** Fetching the PDF engine (the first PDF only). */
   engine = $state(false);
   /** Network trouble (worth trying again) or a book we couldn't read. */
@@ -51,12 +58,13 @@ function getWorker(): Worker {
   return worker;
 }
 
-function getPdfWorker(): Worker {
-  if (pdfWorker) return pdfWorker;
+/** A fresh PDF worker, fetching the engine (from the browser's cache after the first time). */
+function newPdfWorker(): Worker {
+  endPdfWorker();
   pdfWorker = new Worker(new URL('./pdf/worker.ts', import.meta.url), { type: 'module' });
   pdfWorker.onmessage = (e: MessageEvent<FromPdf>) => onPdfMessage(e.data);
   pdfWorker.onerror = () => {
-    // Most likely out of memory: the book is too big for a PDF on this device.
+    // Most likely out of memory.
     fail(false);
     endPdfWorker();
   };
@@ -69,7 +77,7 @@ function getPdfWorker(): Worker {
   return pdfWorker;
 }
 
-/** The PDF worker's memory (gigabytes for a big volume) goes back after each PDF. */
+/** A PDF worker's memory (gigabytes for a big part) goes back when its job is done. */
 function endPdfWorker() {
   pdfWorker?.terminate();
   pdfWorker = undefined;
@@ -77,9 +85,26 @@ function endPdfWorker() {
 }
 
 let current: Book | undefined;
-/** The PDF engine is ready; the PDF document is waiting for it. */
+/** The PDF engine has been fetched; until then the bar shows its download. */
 let engineReady = false;
-let waiting = false;
+
+/** A PDF being made: the parts laid out so far, and what comes next. */
+let pdf:
+  | {
+      job: number;
+      doc: TypstDoc;
+      ranges: [number, number][];
+      results: PartResult[];
+      cover: Uint8Array | undefined;
+      size: PageSize;
+      name: string;
+      /** The bar: words per step (each part, then the end), and the words done. */
+      weights: number[];
+      done: number;
+      /** The step waiting for the engine. */
+      waiting: boolean;
+    }
+  | undefined;
 
 async function onMessage(m: FromWorker) {
   if (m.type === 'cover') {
@@ -100,19 +125,16 @@ async function onMessage(m: FromWorker) {
   } else if (m.type === 'doc') {
     const book = current;
     const format = download.format;
-    if (!book || format?.kind !== 'pdf' || !pdfWorker) return;
+    if (!book || format?.kind !== 'pdf') return;
     const spec = PAGE_SIZES[format.size];
     const cover = await drawCover(epubMeta(book), m.volNote, bindingHex(book.category), spec.height / spec.width).catch(() => undefined);
-    if (m.job !== job || !pdfWorker) return;
-    const msg: ToPdf = { type: 'render', job: m.job, doc: m.doc, size: format.size, cover, name: m.name };
-    pdfWorker.postMessage(msg, cover ? [cover.buffer] : []);
-    // Typst says nothing until it is done; the bar moves on a guess from the number of words.
-    waiting = !engineReady;
-    if (waiting) {
-      download.stage = 'download';
-      download.engine = true;
-    } else tick(m.doc.words.length);
-    expected = m.doc.words.length;
+    if (m.job !== job) return;
+    const ranges = planParts(m.doc);
+    const words = ranges.map(([from, to]) => m.doc.blocks.slice(from, to).reduce((n, b) => n + (b.match(/<w>/g) ?? []).length, 0));
+    // The end (contents, joining, the hidden text) takes about an eighth of the time of the text.
+    const total = words.reduce((a, b) => a + b, 0);
+    pdf = { job: m.job, doc: m.doc, ranges, results: [], cover, size: format.size, name: m.name, weights: [...words, total / 8], done: 0, waiting: false };
+    next();
   } else if (m.type === 'listed') {
     download.stage = undefined;
   } else if (m.type === 'error') {
@@ -121,46 +143,81 @@ async function onMessage(m: FromWorker) {
   }
 }
 
-let expected = 0;
+/** The next part, or the end, in a fresh PDF worker. */
+function next() {
+  if (!pdf) return;
+  const k = pdf.results.length;
+  const n = pdf.ranges.length;
+  // The worker started while the book downloaded takes the first part.
+  const w = k === 0 && pdfWorker ? pdfWorker : newPdfWorker();
+  let msg: ToPdf;
+  if (k < n) {
+    const part = partDoc(pdf.doc, pdf.ranges[k], (pdf.results.at(-1)?.lastPage ?? 0) + 1);
+    msg = { type: 'part', job: pdf.job, part, cover: k === 0 ? pdf.cover : undefined };
+    download.step = n > 1 ? `الجزء ${num(k + 1)} من ${num(n)}` : '';
+  } else {
+    const { doc, results, size, name } = pdf;
+    msg = { type: 'finish', job: pdf.job, preamble: doc.preamble, headings: doc.headings, words: doc.words, parts: results, size, name };
+    download.step = n > 1 ? 'الفهرس وجمع الأجزاء' : '';
+  }
+  w.postMessage(msg);
+  pdf.waiting = !engineReady;
+  if (pdf.waiting) {
+    download.stage = 'download';
+    download.engine = true;
+    download.fraction = 0;
+  } else tick();
+}
 
 function onPdfMessage(m: FromPdf) {
   if (m.type === 'engine') {
     if (m.fraction >= 1) engineReady = true;
-    if (waiting) {
+    if (pdf?.waiting) {
       download.fraction = m.fraction;
       if (engineReady) {
-        waiting = false;
+        pdf.waiting = false;
         download.engine = false;
-        tick(expected);
+        tick();
       }
     }
     return;
   }
-  if (m.job !== job) return;
-  if (m.type === 'stage') {
-    if (m.stage === 'text') download.fraction = Math.max(download.fraction, 0.95);
+  if (m.job !== job || !pdf) return;
+  if (m.type === 'part') {
+    pdf.results.push(m.result);
+    pdf.done += pdf.weights[pdf.results.length - 1];
+    next();
   } else if (m.type === 'done') {
     finish(m.name, m.bytes, 'application/pdf');
     endPdfWorker();
+    pdf = undefined;
   } else if (m.type === 'error') {
     console.error('PDF:', m.message);
     fail(m.network);
     endPdfWorker();
+    pdf = undefined;
   }
 }
 
 let timer: ReturnType<typeof setInterval> | undefined;
 
-/** The «إنشاء» bar for a PDF: about 8,000 words a second on a laptop, slower on a phone; never full until done. */
-function tick(words: number) {
+/**
+ * The «إنشاء» bar for a PDF. Typst says nothing until a part is done, so within a part the bar moves
+ * on a guess, about 8,000 words a second on a laptop (slower on a phone), and never past the part.
+ */
+function tick() {
   stopTicking();
-  download.stage = 'build';
-  download.fraction = 0;
-  const tau = Math.max(2, words / 8000);
+  if (!pdf) return;
+  const { weights, done } = pdf;
+  const w = weights[pdf.results.length] ?? 0;
+  const total = weights.reduce((a, b) => a + b, 0);
+  const tau = Math.max(1, w / 8000);
   const t0 = performance.now();
+  download.stage = 'build';
+  download.fraction = done / total;
   timer = setInterval(() => {
     const t = (performance.now() - t0) / 1000;
-    download.fraction = Math.max(download.fraction, 0.94 * (1 - Math.exp(-t / tau)));
+    download.fraction = Math.max(download.fraction, (done + w * 0.95 * (1 - Math.exp(-t / tau))) / total);
   }, 200);
 }
 
@@ -175,6 +232,7 @@ function finish(name: string, bytes: Uint8Array, mime: string) {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
   download.file = { name, url };
   download.stage = 'done';
+  download.step = '';
   save(url, name);
 }
 
@@ -183,6 +241,7 @@ function fail(network: boolean) {
   download.stage = 'error';
   download.network = network;
   download.engine = false;
+  download.step = '';
 }
 
 export function save(url: string, name: string) {
@@ -199,11 +258,9 @@ export function start(book: Book, choice: Choice, format: Format = { kind: 'epub
   job++;
   stopTicking();
   if (download.file) URL.revokeObjectURL(download.file.url);
-  Object.assign(download, { bookId: book.id, format, stage: 'download', fraction: 0, network: false, file: undefined, engine: false });
-  if (format.kind === 'pdf' && choice.kind !== 'list') {
-    if (!pdfWorker) engineReady = false;
-    getPdfWorker(); // fetches the engine while the book downloads
-  }
+  Object.assign(download, { bookId: book.id, format, stage: 'download', fraction: 0, network: false, file: undefined, engine: false, step: '' });
+  pdf = undefined;
+  if (format.kind === 'pdf' && choice.kind !== 'list') newPdfWorker(); // fetches the engine while the book downloads
   const msg: ToWorker = {
     type: 'make',
     job,
@@ -225,8 +282,10 @@ export function cancel() {
   worker?.terminate();
   worker = undefined;
   endPdfWorker();
+  pdf = undefined;
   download.stage = undefined;
   download.engine = false;
+  download.step = '';
 }
 
 /** Whether the book file is already kept in this browser. */

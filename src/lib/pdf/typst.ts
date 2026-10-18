@@ -11,6 +11,12 @@ export interface Compiled {
   marks: Mark[];
   /** Notes not on the page of their marker: label, marker page, note page. */
   misplaced: [label: string, marker: number, note: number][];
+  /** The book's headings: label, page, y (pt from the top), the page number as printed. */
+  heads: [label: string, page: number, y: number, shown: string][];
+  /** The number printed on the last page. */
+  lastPage: number;
+  /** «الفهرس» entries: entry, page, y. */
+  entries: [entry: number, page: number, y: number][];
 }
 
 export class TypstError extends Error {}
@@ -34,6 +40,15 @@ const MARKS = `
   (m.value, p.page, calc.round(p.x.pt(), digits: 1), calc.round(p.y.pt(), digits: 1))
 }))<marks>]
 #context [#metadata(query(<fe>).map(m => m.value).filter(v => v.at(1) != v.at(2)))<misplaced>]
+#context [#metadata(query(heading).filter(h => h.has("label")).map(h => {
+  let p = h.location().position()
+  (str(h.label), p.page, calc.round(p.y.pt(), digits: 1), numbering("١", ..counter(page).at(h.location())))
+}))<heads>]
+#context [#metadata(counter(page).final().first())<lastpage>]
+#context [#metadata(query(<fx>).map(m => {
+  let p = m.location().position()
+  (m.value, p.page, calc.round(p.y.pt(), digits: 1))
+}))<entries>]
 `;
 
 export function compile(c: TypstCompiler, source: string, files: Record<string, Uint8Array> = {}): Compiled {
@@ -47,9 +62,15 @@ export function compile(c: TypstCompiler, source: string, files: Record<string, 
     if (errors.length) throw new TypstError(errors.map((d) => d.message).join('; '));
     const art = (world.get_artifact(1, 1) ?? {}) as { result?: Uint8Array; diagnostics?: Diagnostic[] };
     if (!art.result) throw new TypstError((art.diagnostics ?? []).map((d) => d.message).join('; ') || 'no PDF');
-    const marks = (JSON.parse(world.query(0, '<marks>', 'value')) as Mark[][])[0] ?? [];
-    const misplaced = (JSON.parse(world.query(0, '<misplaced>', 'value')) as Compiled['misplaced'][])[0] ?? [];
-    return { pdf: art.result, marks, misplaced };
+    const get = <T>(label: string, empty: T): T => (JSON.parse(world.query(0, label, 'value')) as T[])[0] ?? empty;
+    return {
+      pdf: art.result,
+      marks: get<Mark[]>('<marks>', []),
+      misplaced: get<Compiled['misplaced']>('<misplaced>', []),
+      heads: get<Compiled['heads']>('<heads>', []),
+      lastPage: get('<lastpage>', 0),
+      entries: get<Compiled['entries']>('<entries>', []),
+    };
   } finally {
     world.free();
   }

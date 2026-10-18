@@ -25,6 +25,21 @@ export async function pdfjsPages(pdf: Uint8Array): Promise<string[]> {
   return pages;
 }
 
+/** The pages (1-based) the links in the file lead to, as pdf.js follows them. */
+export async function linkTargets(pdf: Uint8Array): Promise<number[]> {
+  const doc = await getDocument({ data: pdf.slice(), verbosity: 0 }).promise;
+  const out: number[] = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    for (const a of await (await doc.getPage(i)).getAnnotations()) {
+      const dest = (a as { dest?: unknown[] }).dest;
+      if (Array.isArray(dest) && dest[0] && typeof dest[0] === 'object') out.push((await doc.getPageIndex(dest[0] as never)) + 1);
+    }
+  }
+  await doc.cleanup();
+  await doc.loadingTask.destroy();
+  return out;
+}
+
 let pdfium: ReturnType<typeof init> | undefined;
 
 /** The text of each page, as PDFium (Chrome) reads it. */
@@ -84,6 +99,13 @@ export function found(expected: string[], text: string): { score: number; missin
     } else missing.set(w, (missing.get(w) ?? 0) + 1);
   }
   return { score: expected.length ? hit / expected.length : 1, missing: [...missing].sort((a, b) => b[1] - a[1]) };
+}
+
+/** The words of each page from where Typst put them: line by line from the top, each line in reading order. */
+export function pageWords(marks: [unknown, number, number, number][], text: (v: never) => string): string[][] {
+  const pages: [number, number, string[]][][] = [];
+  marks.forEach((m, i) => (pages[m[1] - 1] ??= []).push([m[3], i, words(text(m[0] as never))]));
+  return Array.from(pages, (ms) => (ms ?? []).sort((a, b) => a[0] - b[0] || a[1] - b[1]).flatMap((m) => m[2]));
 }
 
 /** Share of the expected words that come back in order (longest common subsequence), page by page. */

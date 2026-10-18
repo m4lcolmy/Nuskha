@@ -8,7 +8,6 @@
   import type { Book } from '../lib/catalog/types.ts';
   import { cancel, download, isEngineKept, isKept, save, start } from '../lib/download.svelte.ts';
   import { WHOLE_MAX_BYTES, type Choice, type Format } from '../lib/epub/protocol.ts';
-  import { PDF_MAX_PAGES } from '../lib/pdf/protocol.ts';
   import type { PageSize } from '../lib/pdf/template.ts';
   import { NOUNS, count, size } from '../lib/format.ts';
   import { storedVolumes } from '../lib/turath/volume-index.ts';
@@ -111,9 +110,6 @@
     (active.kind === choice.kind || (active.kind === 'list' && choice.kind === 'whole')) &&
     (choice.kind !== 'volume' || (active.kind === 'volume' && active.name === choice.name));
 
-  /** A PDF is made in the browser; past this many pages a phone runs out of memory. */
-  const pdfWhole = $derived(book.pages <= PDF_MAX_PAGES);
-  const pdfVolume = (v: Volume) => v.count <= PDF_MAX_PAGES;
   // Once a PDF is made, the engine is kept.
   $effect(() => {
     if (mine && download.stage === 'done' && download.format?.kind === 'pdf') engineKept = true;
@@ -135,7 +131,8 @@
           <li class:active={i === stageIndex} class:done={i < stageIndex}>{name}</li>
         {/each}
       </ol>
-      {#if download.engine}<p class="hint">تنزيل محرّك PDF، مرة واحدة ثم يبقى في متصفحك.</p>{/if}
+      {#if download.engine}<p class="hint">تنزيل محرّك PDF، مرة واحدة ثم يبقى في متصفحك.</p>
+      {:else if download.step && download.stage === 'build'}<p class="hint">{download.step}</p>{/if}
       <div class="bar" aria-hidden="true"><div style:width="{Math.round(download.fraction * 100)}%"></div></div>
       <button class="link" onclick={cancel}>إلغاء</button>
     </div>
@@ -173,8 +170,7 @@
       </button>
       <button
         class="primary pdf"
-        disabled={busy || !pdfWhole}
-        title={pdfWhole ? undefined : 'الكتاب أكبر من أن يُنشأ PDF منه في المتصفح؛ اختر جزءًا'}
+        disabled={busy}
         onclick={() => go({ kind: 'whole' }, 'pdf')}
       >
         <span class="label">تحميل PDF</span>
@@ -185,7 +181,6 @@
       <!-- Never end on a Latin word: a full stop after it shows on the wrong side. -->
       <p class="hint">
         {kept ? 'الكتاب محفوظ في متصفحك، فيُنشأ الملف فورًا.' : 'يُحفظ الكتاب في متصفحك لما بعدُ.'}
-        {#if !pdfWhole}{multi || mayHaveVolumes ? 'ويُنشأ PDF لكل جزء على حدة.' : 'والكتاب أكبر من أن يُنشأ منه PDF في المتصفح.'}{/if}
       </p>
     {/if}
     {@render status({ kind: 'whole' })}
@@ -227,8 +222,7 @@
                     </button>
                     <button
                       class="get"
-                      disabled={busy || !pdfVolume(v)}
-                      title={pdfVolume(v) ? undefined : 'الجزء أكبر من أن يُنشأ PDF منه في المتصفح'}
+                      disabled={busy}
                       onclick={() => go(choice, 'pdf')}
                       aria-label="تحميل {volLong(v.name)} بصيغة PDF"
                     >

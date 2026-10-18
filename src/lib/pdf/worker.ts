@@ -1,10 +1,10 @@
-// The PDF worker: Typst (WebAssembly) lays out the document the book worker wrote, then the hidden
-// text layer goes in. A worker of its own, loaded only for a PDF: the engine is big, and Typst runs
-// much faster in a fresh worker than next to a parsed book. The page ends it after each PDF, which
-// gives its memory back.
+// A PDF worker: Typst (WebAssembly) lays out one part of the book the book worker wrote, or does the
+// end (finishPdf). A worker of its own, loaded only for a PDF, and one per job: the engine gives no
+// memory back between runs, and Typst runs much faster away from the parsed book. The page ends it
+// when its job is done.
 
 import type { TypstCompiler } from '@myriaddreamin/typst-ts-web-compiler';
-import { renderPdf } from './make.ts';
+import { coverFiles, finishPdf, layoutPart } from './make.ts';
 import { advances } from './metrics.ts';
 import { ENGINE_CACHE, type FromPdf, type ToPdf } from './protocol.ts';
 import { createCompiler } from './typst.ts';
@@ -22,25 +22,24 @@ scope.onmessage = (e) => {
   if (m.type === 'warm') {
     engine ??= load(m.engineUrl, m.fontUrl);
     engine.catch(() => (engine = undefined));
-  } else if (m.type === 'render') {
-    render(m).catch((err: unknown) => {
-      const network = err instanceof TypeError || (err instanceof Error && /^HTTP /.test(err.message));
-      post({ type: 'error', job: m.job, message: err instanceof Error ? err.message : String(err), network });
-    });
+    return;
   }
+  run(m).catch((err: unknown) => {
+    const network = err instanceof TypeError || (err instanceof Error && /^HTTP /.test(err.message));
+    post({ type: 'error', job: m.job, message: err instanceof Error ? err.message : String(err), network });
+  });
 };
 
-async function render(m: Extract<ToPdf, { type: 'render' }>) {
+async function run(m: Exclude<ToPdf, { type: 'warm' }>) {
   if (!engine) throw new Error('engine not started');
   const { compiler, font } = await engine;
-  const out = renderPdf(compiler, {
-    doc: m.doc,
-    size: m.size,
-    cover: m.cover,
-    advance: advances(font),
-    onStage: (stage) => post({ type: 'stage', job: m.job, stage }),
-  });
-  post({ type: 'done', job: m.job, name: m.name, bytes: out.pdf }, [out.pdf.buffer]);
+  if (m.type === 'part') {
+    const result = layoutPart(compiler, m.part, coverFiles(m.cover), () => post({ type: 'again', job: m.job }));
+    post({ type: 'part', job: m.job, result }, [result.pdf.buffer]);
+  } else {
+    const { pdf } = finishPdf(compiler, { ...m, advance: advances(font) });
+    post({ type: 'done', job: m.job, name: m.name, bytes: pdf }, [pdf.buffer]);
+  }
 }
 
 async function load(engineUrl: string, fontUrl: string) {

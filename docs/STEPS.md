@@ -215,8 +215,7 @@ A real typesetting engine, compiled to WebAssembly (**typst.ts**), runs in a bac
   printed Arabic books. A footnote too long for its page carries on to the next, as in print.
 - **Printed-edition pages:** «[ص١٣٥]» stays in the text as in the EPUB, and the head shows which pages of the
   printed edition this page covers («ص ١٣٥–١٣٦»), so a citation can be read off any page.
-- **No stranded lines:** headings never sit alone at the foot of a page, and no single line of a paragraph is left
-  alone at the top or foot of a page.
+- **Headings never sit alone** at the foot of a page. (Single lines of a paragraph may: see the notes under step 5.)
 - **Colours:** the same rubrication red for headings and green for Quran as the EPUB, chosen to print well in
   greyscale too.
 
@@ -227,8 +226,8 @@ A real typesetting engine, compiled to WebAssembly (**typst.ts**), runs in a bac
 - **Links:** footnote numbers jump to the note and back.
 - **File details:** title, author, `lang="ar"`, right-to-left reading order (so two-page view puts page 1 on the
   right), the source note. Fonts embedded as subsets.
-- **Volumes:** the same choices as the EPUB: one volume, or the whole book. At most 1,000 book pages in one PDF
-  (a phone runs out of memory past that), so bigger books come per volume.
+- **Volumes:** the same choices as the EPUB: one volume, or the whole book, however long. A long book is laid out
+  in parts and joined into one file (see the notes under step 5).
 
 ### Text that copies right
 - The font is static Amiri (variable fonts ruined the text layer, 3–20%, in the earlier test).
@@ -360,24 +359,41 @@ Text layer, words correct (pdf.js = Firefox and web viewers, PDFium = Chrome and
 
   Poppler (Okular, Evince) reads the vowelled book at 95.8% (12.6% before). The pages look exactly as Typst made
   them (pixel for pixel). The tagged-PDF structure goes, as it pointed at the printed glyphs.
-- **Notes on the right page.** A note in a heading is placed under the heading (the heading shows its number).
-  After layout, Typst reports any note that is not on its marker's page; when the block holding the marker
-  starts on the marker's page anyway, a page break goes before it and Typst lays out once more. Siyar vol. 12:
-  139 of 1,356 notes landed a page early; with the heading change 26, after the second layout 2. What is left is a
-  paragraph that started on the page before (Siyar chapter: 2 of 223).
-- **Speed and memory.** The markers make Typst about 1.5× slower and use twice the memory (2 GB in Node for
-  Siyar vol. 12). In the site, Siyar vol. 12 (739 book pages, 940 A5 pages) takes 30 s in Chrome on this laptop,
-  from the click to the file: book download 1.6 s, reading 1.5 s, two layouts and the text layer 27 s. A phone
-  will take a few times longer. Typst has a worker of its own, which the page ends after each PDF to give the
-  memory back; hence also the 1,000-page limit per PDF. (In Node, Typst runs 2–3× slower next to a parsed book,
-  even in another thread, so `npm run pdfcheck` times are not the site's; Chrome shows no such effect.)
-- **File size.** Dictionaries go into compressed object streams, and the streams are compressed harder: 208 pages
-  of البداية والنهاية are 1.9 MB (was 2.9 MB), Siyar vol. 12 7.6 MB with its cover (Typst alone: 10 MB). The hidden
-  text is about a third of a file.
+- **Notes on the right page.** Typst 0.14 leaves a note on the page before its marker when it moves the
+  marker's line to the next page (to keep a heading with its paragraph, or two lines of a paragraph together).
+  So: a note in a heading is placed under the heading (the heading shows its number), and widow and orphan
+  control is off (a single line may now sit alone at the top or foot of a page). If Typst still leaves a note
+  behind and the block holding the marker starts on the marker's page, a page break goes before the block and
+  Typst lays out the part once more. With widow control on, Siyar vol. 12 had 139 of 1,356 notes a page early,
+  and زاد المعاد 637 of 16,164 (392 after the second layout). Now 187 (1.2%) of زاد المعاد's notes are not on
+  their marker's page; in the part examined closely (2,385 notes), all such notes start on the page after their
+  marker, where a long note did not fit at all, and none is on an earlier page.
+- **Long books in parts.** One Typst engine can't lay out a whole long book: WebAssembly here has at most 4 GB,
+  Siyar vol. 12 already takes 2 GB, and an engine gives no memory back between runs (the third volume in a row
+  failed). So the text is cut into parts of at most 120,000 words (about 700 A5 pages, `src/lib/pdf/parts.ts`),
+  where the book starts a new page anyway (a volume, else a chapter, else a heading). Each part is laid out by
+  a fresh worker, numbering its pages on from the part before; a last worker lays out «الفهرس» (now written by
+  Nuskha, from where every heading landed), joins the parts (bookmarks and page labels too), adds the links of
+  «الفهرس» and the hidden text. The bar counts the parts («الجزء ٣ من ١٣») and moves within each on an estimate.
+- **Speed and memory.** The markers make Typst about 1.5× slower and use twice the memory. In Chrome on this
+  laptop, from the click to the file: Siyar vol. 12 (739 book pages, 940 A5 pages) 30 s; زاد المعاد whole (3,983
+  book pages, 3,818 A5 pages, 13 parts) 2 min 3 s. A phone will take a few times longer. (In Node, Typst runs
+  2–3× slower next to a parsed book, even in another thread, so `npm run pdfcheck` times are not the site's.)
+- **File size.** Dictionaries go into compressed object streams, the streams are compressed harder, and Typst's
+  page content loses its tags and its eight-decimal positions (two are a hundredth of a point; no visible
+  change): زاد المعاد whole is 36 MB (47 MB before the content was tidied). Typst's page content is two thirds of
+  a file, the hidden text a third.
+- **Brackets in PDFium.** Chrome's reader mirrors «» () [] when it reads right-to-left text back; pdf.js doesn't.
+  The hidden text suits pdf.js, so in Chrome a copied «و«الكبرى»» reads «و»الكبرى«». Searching is not affected.
 - **The book page.** «تحميل EPUB» and «تحميل PDF» side by side, the page size (A5 or ١٧×٢٤ سم) under them,
   remembered in the browser; every volume has its own EPUB and PDF buttons. The first PDF notes that the engine is
   fetched once. Made in the browser: a small book in a few seconds; volume 3 of البداية والنهاية (416 book pages)
-  in 38 s, with the 22 MB book download.
+  in 38 s, with the 22 MB book download; زاد المعاد whole in 2 min.
+
+  | `npm run pdfcheck 197` (زاد المعاد whole) | words | in order |
+  |---|---|---|
+  | pdf.js | 100.0% | 99.5% |
+  | PDFium | 99.7% | 96.8% |
 - `npm run pdfcheck` builds the test books into `.cache/pdf/` and scores them (`-- 22669 --vol 12`,
   `--size 17x24`, `--pages 1007-1101`). `npm test` builds excerpts of three books (`tests/fixtures/`).
 

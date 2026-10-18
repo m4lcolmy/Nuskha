@@ -15,11 +15,15 @@ import { Worker } from 'node:worker_threads';
 import { decodeCatalog, type CatalogFile } from '../src/lib/catalog/types.ts';
 import { epubMeta } from '../src/lib/epub/meta.ts';
 import { buildTypst } from '../src/lib/pdf/build.ts';
-import type { Rendered } from '../src/lib/pdf/make.ts';
+import type { TypstDoc } from '../src/lib/pdf/build.ts';
+import type { PartResult } from '../src/lib/pdf/make.ts';
+import { partDoc, planParts } from '../src/lib/pdf/parts.ts';
+import type { ToPdf } from '../src/lib/pdf/protocol.ts';
 import type { PageSize } from '../src/lib/pdf/template.ts';
+import type { Mark } from '../src/lib/pdf/typst.ts';
 import { parseBook } from '../src/lib/turath/book.ts';
 import { volumesOf } from '../src/lib/turath/volumes.ts';
-import { bookWords, found, inOrder, pdfiumPages, pdfjsPages, words } from './pdf-text.ts';
+import { bookWords, found, inOrder, pageWords, pdfiumPages, pdfjsPages } from './pdf-text.ts';
 
 // A small one, one with many notes (a chapter of Siyar), a fully vowelled one, many volumes.
 const TEST_BOOKS: [id: number, pages?: [number, number]][] = [[17100], [22669, [1007, 1101]], [12014, [20, 80]], [8376, [0, 120]]];
@@ -40,8 +44,8 @@ const books: [number, [number, number]?][] = args.length ? args.map((a) => [Numb
 const catalog = decodeCatalog(JSON.parse(readFileSync(join(root, 'public/data/catalog.json'), 'utf8')) as CatalogFile);
 let failed = 0;
 
-/** Typst in a worker thread of its own, a fresh one per book (as the site does). */
-function render(doc: unknown, size: PageSize): Promise<Rendered & { ms: number; rss: number }> {
+/** One job (a part, or the end) in a worker thread of its own, as the site does. */
+function inWorker<T>(msg: Exclude<ToPdf, { type: 'warm' }>): Promise<T & { ms: number; rss: number }> {
   const w = new Worker(new URL('./pdf-worker.ts', import.meta.url));
   return new Promise((ok, bad) => {
     w.once('message', (r) => {
@@ -49,8 +53,26 @@ function render(doc: unknown, size: PageSize): Promise<Rendered & { ms: number; 
       void w.terminate();
     });
     w.once('error', bad);
-    w.postMessage({ doc, size });
+    w.postMessage(msg);
   });
+}
+
+/** The book in parts, then the end, each in a fresh worker. */
+async function render(doc: TypstDoc, size: PageSize) {
+  const results: PartResult[] = [];
+  let ms = 0;
+  let rss = 0;
+  for (const range of planParts(doc)) {
+    const part = partDoc(doc, range, (results.at(-1)?.lastPage ?? 0) + 1);
+    const r = await inWorker<{ result: PartResult }>({ type: 'part', job: 0, part, cover: undefined });
+    results.push(r.result);
+    ms += r.ms;
+    rss = Math.max(rss, r.rss);
+  }
+  const { preamble, headings, words } = doc;
+  const end = await inWorker<{ pdf: Uint8Array; marks: Mark[] }>({ type: 'finish', job: 0, preamble, headings, words, parts: results, size, name: '' });
+  const misplaced = results.reduce((n, p) => [n[0] + p.misplaced[0], n[1] + p.misplaced[1]], [0, 0]);
+  return { pdf: end.pdf, marks: end.marks, misplaced, parts: results.length, ms: ms + end.ms, rss: Math.max(rss, end.rss) };
 }
 
 for (const [id, pages] of books) {
@@ -89,13 +111,9 @@ for (const [id, pages] of books) {
   // The words of the book pages, and of each PDF page in reading order (from the marks).
   const shown = book.pages.filter((p) => volumes.slice(from, to + 1).some((v) => v.name === p.vol));
   const expected = bookWords(shown);
-  const perPage: string[][] = [];
-  for (const [v, page] of r.marks) {
-    const text = Array.isArray(v) ? v[0] : (doc.words[v]?.t ?? '');
-    (perPage[page - 1] ??= []).push(...words(text));
-  }
+  const perPage = pageWords(r.marks, (v: number | [string, number]) => (Array.isArray(v) ? v[0] : (doc.words[v]?.t ?? '')));
   const report = [
-    `${name}: ${(r.pdf.length / 1024 / 1024).toFixed(1)} MB, written in ${Math.round(built)} ms, laid out in ${(ms / 1000).toFixed(1)} s (${(r.rss / 1e9).toFixed(1)} GB)`,
+    `${name}: ${(r.pdf.length / 1024 / 1024).toFixed(1)} MB, written in ${Math.round(built)} ms, laid out in ${r.parts} part(s), ${(ms / 1000).toFixed(1)} s (${(r.rss / 1e9).toFixed(1)} GB)`,
   ];
   report.push(`  notes on the wrong page: ${r.misplaced[0]} → ${r.misplaced[1]}`);
   for (const [viewer, read] of [['pdf.js', pdfjsPages], ['PDFium', pdfiumPages]] as const) {

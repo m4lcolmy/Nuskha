@@ -6,9 +6,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bookWords, found, inOrder, pdfiumPages, pdfjsPages, words } from '../scripts/pdf-text.ts';
+import { bookWords, found, inOrder, linkTargets, pageWords, pdfiumPages, pdfjsPages } from '../scripts/pdf-text.ts';
 import type { EpubMeta } from '../src/lib/epub/build.ts';
-import { buildTypst, typstSource } from '../src/lib/pdf/build.ts';
+import { buildTypst } from '../src/lib/pdf/build.ts';
+import { partDoc, planParts, typstSource } from '../src/lib/pdf/parts.ts';
 import { renderPdf } from '../src/lib/pdf/make.ts';
 import { advances } from '../src/lib/pdf/metrics.ts';
 import { compact, getKey, removeKey, setKey } from '../src/lib/pdf/pdffile.ts';
@@ -60,7 +61,7 @@ describe('Typst source', () => {
       [{ text: '<span data-type="title" id=toc-1>باب (^١)</span>\nنص (^٢) آخر.\n_________\n(^١) حاشية العنوان.\n(^٢) حاشية النص.' }],
       [{ title: 'باب', level: 1, page: 0 }],
     );
-    const src = typstSource(d);
+    const src = typstSource(partDoc(d, [0, d.blocks.length], 1));
     expect(src).toMatch(/#heading\(level: 1\)\[[^\n]*#fnref\(<fn1>\)/);
     // The heading's note opens the paragraph under it; the other stays at its marker.
     expect(src).toMatch(/#box\(width: 0pt, hide\[#footnote\[[^\n]*حاشية[^\n]*\]<fn1>\]\)[^\n]*نص[^\n]*~#footnote\[/);
@@ -69,7 +70,7 @@ describe('Typst source', () => {
 
   it('joins a note carried over to the next page («=») to the note it continues', () => {
     const d = doc([{ text: 'أ (^١)\n_________\n(^١) أول' }, { text: 'ب\n_________\n= تتمة' }]);
-    expect(typstSource(d)).toMatch(/#footnote\[[^\]]*أول[^\]]*#parbreak\(\)[^\]]*تتمة/);
+    expect(typstSource(partDoc(d, [0, d.blocks.length], 1))).toMatch(/#footnote\[[^\]]*أول[^\]]*#parbreak\(\)[^\]]*تتمة/);
   });
 });
 
@@ -114,8 +115,7 @@ describe('the text readers get back', () => {
         expect(new TextDecoder().decode(r.pdf.subarray(0, 8))).toBe('%PDF-1.7');
 
         const expected = bookWords(f.pages);
-        const perPage: string[][] = [];
-        for (const [v, page] of r.marks) (perPage[page - 1] ??= []).push(...words(Array.isArray(v) ? v[0] : (d.words[v]?.t ?? '')));
+        const perPage = pageWords(r.marks, (v: number | [string, number]) => (Array.isArray(v) ? v[0] : (d.words[v]?.t ?? '')));
         for (const read of [pdfjsPages, pdfiumPages]) {
           const pages = await read(r.pdf);
           expect(found(expected, pages.join('\n')).score).toBeGreaterThanOrEqual(0.95);
@@ -125,4 +125,35 @@ describe('the text readers get back', () => {
       120_000,
     );
   }
+});
+
+describe('a book in parts', () => {
+  it('joins parts laid out one by one into one file, page numbers running on', async () => {
+    const f = JSON.parse(readFileSync(join(root, 'tests/fixtures/pdf-22669.json'), 'utf8')) as TurathBook & { meta: EpubMeta };
+    const volumes = volumesOf(
+      f.pages.map((p) => p.vol),
+      f.headings,
+    );
+    const d = buildTypst({ book: f, meta: f.meta, volumes, from: 0, to: volumes.length - 1, size: 'a5' });
+    expect(planParts(d, 2500).length).toBeGreaterThan(2);
+    const one = renderPdf(await compiler, { doc: d, size: 'a5', advance: advances(font) });
+    const many = renderPdf(await compiler, { doc: d, size: 'a5', advance: advances(font), partWords: 2500 });
+
+    // The same pages, give or take a page where a part starts on a new page.
+    const pages = (r: { marks: [unknown, number, ...unknown[]][] }) => Math.max(...r.marks.map((m) => m[1]));
+    expect(Math.abs(pages(many) - pages(one))).toBeLessThanOrEqual(planParts(d, 2500).length);
+    for (const read of [pdfjsPages, pdfiumPages]) {
+      const text = await read(many.pdf);
+      expect(text.length).toBe(pages(many));
+      expect(found(bookWords(f.pages), text.join('\n')).score).toBeGreaterThanOrEqual(0.95);
+    }
+    // One numbering through the book: the last text page's number follows on from the first part's.
+    const shown = (await pdfjsPages(many.pdf)).map((t) => t.match(/^[٠-٩]+$/m)?.[0]).filter(Boolean);
+    expect(new Set(shown).size).toBe(shown.length);
+    // «الفهرس» (the last pages) links to headings all through the book.
+    const targets = await linkTargets(many.pdf);
+    expect(targets.length).toBeGreaterThan(5);
+    expect(Math.max(...targets)).toBeGreaterThan(pages(many) * 0.7);
+    expect(Math.min(...targets)).toBeLessThan(pages(many) * 0.3);
+  }, 120_000);
 });

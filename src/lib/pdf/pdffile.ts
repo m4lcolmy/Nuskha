@@ -123,6 +123,92 @@ function stripStrings(s: string): string {
   return s.replace(/\((?:\\.|[^\\()]|\((?:\\.|[^\\()])*\))*\)/g, '()').replace(/<[0-9A-Fa-f\s]*>/g, '<>');
 }
 
+/** Object references shifted by `by` («12 0 R» → «112 0 R»), strings left alone. */
+export function shiftRefs(body: string, by: number): string {
+  if (!by) return body;
+  return body.replace(/(\((?:\\.|[^\\()]|\((?:\\.|[^\\()])*\))*\)|<[0-9A-Fa-f\s]*>)|(\d+)(\s+0\s+R\b)/g, (m, str, n, r) =>
+    str ? m : `${Number(n) + by}${r}`,
+  );
+}
+
+/** Page object numbers in order, from a page tree node. */
+export function pageList(pdf: Pdf, node: number): number[] {
+  const o = pdf.objects.get(node);
+  if (!o) return [];
+  if (/\/Type\s*\/Page\b/.test(o.body)) return [node];
+  return refsIn(getKey(o.body, 'Kids') ?? '').flatMap((k) => pageList(pdf, k));
+}
+
+/** The catalog's object number. */
+export const rootOf = (pdf: Pdf) => refsIn(getKey(pdf.trailer, 'Root') ?? '')[0];
+
+/**
+ * Several PDFs made by Typst, one after the other, as one: objects renumbered, one page tree, the
+ * bookmarks chained, the page labels shifted. The first file's catalog and details stay.
+ * Returns the joined file and where each file's pages start in it.
+ */
+export function joinPdfs(files: Uint8Array[]): { pdf: Pdf; starts: number[] } {
+  const out: Pdf = { objects: new Map(), trailer: '' };
+  const pages: number[] = [];
+  const starts: number[] = [];
+  const outlines: { first: string; last: string; count: number }[] = [];
+  const labels: string[] = [];
+  let base = 0;
+  files.forEach((bytes, k) => {
+    const part = readPdf(bytes);
+    let max = 0;
+    for (const [n, o] of part.objects) {
+      out.objects.set(n + base, { body: shiftRefs(o.body, base), stream: o.stream });
+      max = Math.max(max, n);
+    }
+    const trailer = shiftRefs(part.trailer, base);
+    base += max;
+    const catalog = out.objects.get(refsIn(getKey(trailer, 'Root') ?? '')[0])!;
+    if (k === 0) out.trailer = trailer;
+    starts.push(pages.length);
+
+    const ol = refsIn(getKey(catalog.body, 'Outlines') ?? '')[0];
+    const o = ol === undefined ? undefined : out.objects.get(ol);
+    const first = o && getKey(o.body, 'First');
+    if (o && first) outlines.push({ first, last: getKey(o.body, 'Last')!, count: Math.abs(Number(getKey(o.body, 'Count') ?? 0)) });
+
+    let pl = getKey(catalog.body, 'PageLabels');
+    if (pl && /^\d+\s+0\s+R$/.test(pl)) pl = out.objects.get(refsIn(pl)[0])?.body;
+    const nums = (pl && getKey(pl, 'Nums')) ?? '';
+    for (const m of nums.matchAll(/(\d+)\s+(\d+\s+0\s+R|<<[^>]*>>)/g)) labels.push(`${Number(m[1]) + pages.length} ${m[2]}`);
+
+    pages.push(...pageList(out, refsIn(getKey(catalog.body, 'Pages') ?? '')[0]));
+  });
+
+  const catalog = out.objects.get(rootOf(out))!;
+  const tree = addObject(out, { body: `<</Type/Pages/Kids[${pages.map((n) => `${n} 0 R`).join(' ')}]/Count ${pages.length}>>` });
+  for (const n of pages) out.objects.get(n)!.body = setKey(out.objects.get(n)!.body, 'Parent', `${tree} 0 R`);
+  catalog.body = setKey(catalog.body, 'Pages', `${tree} 0 R`);
+
+  if (outlines.length) {
+    const root = addObject(out, { body: '' });
+    outlines.forEach((ol, i) => {
+      // Every top-level bookmark of this file now hangs from the new root.
+      for (let n = refsIn(ol.first)[0]; n !== undefined; ) {
+        const item = out.objects.get(n)!;
+        item.body = setKey(item.body, 'Parent', `${root} 0 R`);
+        n = refsIn(getKey(item.body, 'Next') ?? '')[0];
+      }
+      if (i > 0) {
+        const prevLast = out.objects.get(refsIn(outlines[i - 1].last)[0])!;
+        prevLast.body = setKey(prevLast.body, 'Next', ol.first);
+        const first = out.objects.get(refsIn(ol.first)[0])!;
+        first.body = setKey(first.body, 'Prev', outlines[i - 1].last);
+      }
+    });
+    const count = outlines.reduce((n, o) => n + o.count, 0);
+    out.objects.get(root)!.body = `<</Type/Outlines/First ${outlines[0].first}/Last ${outlines.at(-1)!.last}/Count ${count}>>`;
+    catalog.body = setKey(catalog.body, 'Outlines', `${root} 0 R`);
+  }
+  if (labels.length) catalog.body = setKey(catalog.body, 'PageLabels', `<</Nums[${labels.join(' ')}]>>`);
+  return { pdf: out, starts };
+}
+
 /** Whitespace squeezed out of a dictionary or array (outside strings). */
 export function compact(body: string): string {
   let out = '';

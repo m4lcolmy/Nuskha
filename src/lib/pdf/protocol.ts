@@ -1,18 +1,31 @@
-// Messages between the book page and the PDF worker.
+// Messages between the book page and a PDF worker. A worker does one job and is ended: a part of
+// the book (layoutPart), or the end (finishPdf: «الفهرس», joining the parts, the hidden text).
 
-import type { TypstDoc } from './build.ts';
+import type { TypstDoc, Word } from './build.ts';
+import type { PartResult } from './make.ts';
+import type { PartDoc } from './parts.ts';
 import type { PageSize } from './template.ts';
-
-export type PdfStage = 'engine' | 'layout' | 'again' | 'text';
 
 export type ToPdf =
   /** Start fetching the engine (while the book downloads). */
   | { type: 'warm'; engineUrl: string; fontUrl: string }
-  | { type: 'render'; job: number; doc: TypstDoc; size: PageSize; cover: Uint8Array | undefined; name: string };
+  | { type: 'part'; job: number; part: PartDoc; cover: Uint8Array | undefined }
+  | {
+      type: 'finish';
+      job: number;
+      preamble: string;
+      headings: TypstDoc['headings'];
+      words: Word[];
+      parts: PartResult[];
+      size: PageSize;
+      name: string;
+    };
 
 export type FromPdf =
   | { type: 'engine'; fraction: number }
-  | { type: 'stage'; job: number; stage: PdfStage }
+  /** Laying out the part again, to put notes back on their pages. */
+  | { type: 'again'; job: number }
+  | { type: 'part'; job: number; result: PartResult }
   | { type: 'done'; job: number; name: string; bytes: Uint8Array }
   | { type: 'error'; job: number; message: string; network: boolean };
 
@@ -25,6 +38,3 @@ export const COVER_PATH = '/cover.jpg';
  */
 export const ENGINE_FILE = 'engine/typst-ts-web-compiler-0.7.0.wasm.gz';
 export const ENGINE_CACHE = 'nuskha-engine-v1';
-
-/** More book pages than this make no PDF in the browser: a phone runs out of memory. */
-export const PDF_MAX_PAGES = 1000;
