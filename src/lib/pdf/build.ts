@@ -108,7 +108,7 @@ export function buildTypst(input: PdfInput): TypstDoc {
   const heading = (level: number, markup: () => string, rank: number, start: number) => {
     const label = `h${headings.length + 1}`;
     const from = w.words.length;
-    lines.push(`#heading(level: ${level})[${markup()}]<${label}>`);
+    lines.push(`#heading(level: ${level})[${markup()}${END}]<${label}>`);
     const title = w.words
       .slice(from)
       .map((x, i) => (i && x.sp ? ' ' : '') + x.t)
@@ -119,7 +119,7 @@ export function buildTypst(input: PdfInput): TypstDoc {
 
   const endPara = () => {
     if (open === null) return;
-    lines.push(open);
+    lines.push(open + END);
     lastPara = lines.length - 1;
     for (const id of w.ids.splice(0)) notesAt[id] = { block: lastPara, word: paraWord };
     open = null;
@@ -142,7 +142,7 @@ export function buildTypst(input: PdfInput): TypstDoc {
     const at = p.page === null ? '' : `${str(multi ? volShort(p.vol) : '')}, ${str(num(p.page))}`;
     // The page marker, and the space after it (in the markup, not in a string) for the text layer.
     const shown = () => {
-      const s = `[${w.text(`[${label}]`, SIZE.pg)}]`;
+      const s = `[${w.text(`[${label}]`, SIZE.pg)}${END}]`;
       w.space = true;
       return s;
     };
@@ -232,7 +232,7 @@ export function buildTypst(input: PdfInput): TypstDoc {
     volumeLevel,
   });
 
-  const arg = (s: string, size: number) => (s ? `[${w.text(s, size)}]` : 'none');
+  const arg = (s: string, size: number) => (s ? `[${w.text(s, size)}${END}]` : 'none');
   const titleArgs = [
     arg(meta.mainTitle, 2.1),
     arg(meta.edition, 1.05),
@@ -255,6 +255,14 @@ export function buildTypst(input: PdfInput): TypstDoc {
 }
 
 // --- markup -------------------------------------------------------------------------------------
+
+/**
+ * Closes a paragraph (or the label in a box). Typst places a marker that ends a paragraph under it,
+ * at its left edge, which would put the last word's hidden text away from the printed word, out of
+ * reach of selection. Anything after the marker keeps it in the line: zero-width spacing, which
+ * unlike a character leaves the layout as it was (a full stop still hangs at the end of the line).
+ */
+const END = '#h(0pt)';
 
 const unescape = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
@@ -336,7 +344,7 @@ class Writer {
   private noteBody(n: Note, notes: Map<string, Note>): string {
     const space = this.space;
     this.space = false;
-    const body = n.lines.map((l) => this.markup(l, notes, SIZE.note)).join('#parbreak()');
+    const body = n.lines.map((l) => this.markup(l, notes, SIZE.note) + END).join('#parbreak()');
     this.space = space;
     return body;
   }
@@ -364,5 +372,7 @@ function cardBody(w: Writer, info: string, meta: EpubMeta, source: string, date:
     '#v(1.2em)',
     w.text(`المصدر: ${source}`, SIZE.card),
     w.text(`أُنشئ هذا الملف بـ«نسخة» في ${d}. الخط: أميري (رخصة SIL Open Font License).`, SIZE.card),
-  ].join('\n\n');
+  ]
+    .map((r) => (r.startsWith('#v(') ? r : r + END))
+    .join('\n\n');
 }

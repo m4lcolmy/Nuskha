@@ -98,10 +98,11 @@ export function template(t: TemplateInput): string {
 #set par(justify: true, leading: 0pt, spacing: 0.45em, first-line-indent: 0pt)
 #set block(spacing: 0.45em)
 
-// A word made here (not from the book), with its marker; size in em of the body text.
-#let lit(s, size) = [#s#metadata((s, size))<w>]
+// A word made here (not from the book), with its marker; size in em of the body text. It often
+// ends a paragraph: the zero-width spacing keeps the marker in the line (END in build.ts).
+#let lit(s, size) = [#s#metadata((s, size))<w>#h(0pt)]
 
-#let book-title = [${t.title}]
+#let book-title = [${t.title}#h(0pt)]
 
 // --- the page ----------------------------------------------------------------------------------
 
